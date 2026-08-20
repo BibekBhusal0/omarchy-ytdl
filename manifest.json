@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "bibek.ytdl",
   "name": "yt-dlp",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "author": "Bibek Bhusal",
   "description": "Download videos from YouTube and other sites via yt-dlp with parallel downloads and a persistent history.",
   "homepage": "https://github.com/BibekBhusal0/omarchy-ytdl",

@@ -2,6 +2,8 @@
 
 A YouTube video downloader for the Omarchy bar.
 
+https://github.com/user-attachments/assets/8a63333c-689c-4793-9ed7-804d2df5b888
+
 ## Features
 
 - **Parallel downloads**: Download up to three videos at once, with live progress
