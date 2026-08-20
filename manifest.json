@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 1,
+  "id": "bibek.ytdl",
+  "name": "yt-dlp",
+  "version": "1.0.0",
+  "author": "Bibek Bhusal",
+  "description": "Download videos from YouTube and other sites via yt-dlp with parallel downloads and a persistent history.",
+  "homepage": "https://github.com/BibekBhusal0/omarchy-ytdl",
+  "kinds": ["service", "bar-widget"],
+  "keepLoaded": true,
+  "entryPoints": {
+    "service": "Service.qml",
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "yt-dlp",
+    "description": "Video downloader with parallel downloads and a persistent history.",
+    "category": "Media",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "downloadLocation": "~/Downloads/yt-dlp",
+      "defaultQuality": "1080p",
+      "cookiesBrowser": "none",
+      "extraArgs": "",
+      "enableHistory": true
+    },
+    "schema": [
+      {
+        "key": "downloadLocation",
+        "type": "string",
+        "label": "Download location",
+        "description": "Directory where videos are saved."
+      },
+      {
+        "key": "defaultQuality",
+        "type": "enum",
+        "label": "Default quality",
+        "options": ["best", "1080p", "720p", "480p"],
+        "defaultValue": "1080p",
+        "description": "Default download format."
+      },
+      {
+        "key": "cookiesBrowser",
+        "type": "enum",
+        "label": "Cookies from browser",
+        "options": ["none", "firefox", "chromium", "chrome", "zen", "helium", "glide"],
+        "defaultValue": "none",
+        "description": "Browser to pull cookies from to bypass YouTube bot detection. Use 'none' if you have no issues."
+      },
+      {
+        "key": "extraArgs",
+        "type": "string",
+        "label": "Extra yt-dlp args",
+        "description": "Extra arguments passed to every yt-dlp invocation, e.g. '--cookies-from-browser chromium' or '--socket-timeout 30'."
+      },
+      {
+        "key": "enableHistory",
+        "type": "boolean",
+        "label": "Enable download history",
+        "description": "Keep finished downloads in a history list with play, retry and remove actions.",
+        "defaultValue": true
+      }
+    ]
+  }
+}

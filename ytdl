@@ -1,0 +1,171 @@
+#!/bin/sh
+# ytdl helper script - wraps yt-dlp for the shell plugin
+
+CMD="$1"
+shift
+
+SCRIPT_DIR="$(dirname "$0")"
+
+# Resolve a --cookies-from-browser flag for the given browser name.
+cookies_flag() {
+  BROWSER="$1"
+  [ -z "$BROWSER" ] || [ "$BROWSER" = "none" ] && return 0
+  case "$BROWSER" in
+    firefox) echo "--cookies-from-browser firefox" ;;
+    chromium) echo "--cookies-from-browser chromium" ;;
+    chrome) echo "--cookies-from-browser chrome" ;;
+    zen)
+      PROFILE="$(find_ff_profile ~/.config/zen)"
+      [ -z "$PROFILE" ] && PROFILE=~/.config/zen
+      OUT="$(mktemp -d)"
+      export_cookies "$PROFILE" "$OUT" youtube && echo "--cookies-from-browser firefox:$OUT" || echo ""
+      ;;
+    helium)
+      # Chromium-based; cookies live in a profile dir, encrypted. yt-dlp decrypts
+      # them via the browser's key when given the profile dir.
+      PROFILE=""
+      for p in ~/.config/net.imput.helium/*/; do
+        [ -f "$p/Default/Cookies" ] && { PROFILE="$p"; break; }
+      done
+      [ -z "$PROFILE" ] && PROFILE=~/.config/net.imput.helium
+      echo "--cookies-from-browser chromium:$PROFILE"
+      ;;
+    glide)
+      PROFILE="$(find_ff_profile ~/.config/glide)"
+      [ -z "$PROFILE" ] && PROFILE="$(find ~/.config/glide -maxdepth 2 -name cookies.sqlite 2>/dev/null | head -1 | xargs dirname 2>/dev/null)"
+      [ -z "$PROFILE" ] && PROFILE=~/.config/glide
+      OUT="$(mktemp -d)"
+      export_cookies "$PROFILE" "$OUT" youtube && echo "--cookies-from-browser firefox:$OUT" || echo ""
+      ;;
+    *) echo "" ;;
+  esac
+}
+
+# Find a Firefox-style profile dir under $1 whose cookies contain a logged-in
+# YouTube SID. immutable=1 reads a live (locked) db without the wal.
+find_ff_profile() {
+  BASE="$1"
+  for p in "$BASE"/*/; do
+    [ -f "$p/cookies.sqlite" ] || continue
+    if sqlite3 "file:${p}cookies.sqlite?mode=ro&immutable=1" \
+        "select count(*) from moz_cookies where host like '%youtube%' and name='SID'" 2>/dev/null | grep -q "^[1-9]"; then
+      echo "${p%/}"
+      return 0
+    fi
+  done
+  return 1
+}
+
+# Copy a Firefox-style cookie DB, merge the live -wal into it, dedupe to the
+# newest cookie per (host, name), and filter to one host. yt-dlp reads the
+# result via --cookies-from-browser firefox:<outdir>.
+export_cookies() {
+  PROFILE="$1"
+  OUT="$2"
+  FILTER="$3"
+  DB="$OUT/cookies.sqlite"
+  [ -f "$PROFILE/cookies.sqlite" ] || return 1
+  cp "$PROFILE/cookies.sqlite" "$DB"
+  for suf in -wal -shm; do
+    [ -f "$PROFILE/cookies.sqlite$suf" ] && cp "$PROFILE/cookies.sqlite$suf" "$DB$suf"
+  done
+  sqlite3 "$DB" "PRAGMA wal_checkpoint(TRUNCATE);" >/dev/null 2>&1
+  rm -f "$DB-wal" "$DB-shm"
+  if [ -n "$FILTER" ]; then
+    sqlite3 "$DB" "DELETE FROM moz_cookies WHERE rowid NOT IN (SELECT rowid FROM (SELECT rowid, host, name, creationTime, ROW_NUMBER() OVER (PARTITION BY host, name ORDER BY creationTime DESC) AS rn FROM moz_cookies) WHERE rn = 1); DELETE FROM moz_cookies WHERE host NOT LIKE '%$FILTER%';"
+  else
+    sqlite3 "$DB" "DELETE FROM moz_cookies WHERE rowid NOT IN (SELECT rowid FROM (SELECT rowid, host, name, creationTime, ROW_NUMBER() OVER (PARTITION BY host, name ORDER BY creationTime DESC) AS rn FROM moz_cookies) WHERE rn = 1);"
+  fi
+}
+
+# Check if a download attempt failed specifically because of YouTube bot
+# detection or stream throttling. $1 = exit code, $2 = temp stderr log file.
+# "not a bot" = extractor-phase sign-in wall; "HTTP Error 403" = download-phase
+# throttling. Both resolve with logged-in cookies in practice.
+needs_cookies() {
+  [ "$1" -ne 0 ] && grep -Eq "not a bot|HTTP Error 403" "$2"
+}
+
+# Run yt-dlp for a download/title, retrying once with browser cookies if the
+# first attempt hits bot detection. $1.. = yt-dlp args (without cookies).
+# Stdout (title, progress lines) passes through live so the shell can stream
+# progress; stderr is captured to a temp file and shown only on failure.
+# PYTHONUNBUFFERED keeps yt-dlp's line output from being pipe-block-buffered.
+run_with_retry() {
+  ERRL="$(mktemp)"
+  PYTHONUNBUFFERED=1 yt-dlp "$@" 2>"$ERRL"
+  RC=$?
+  if needs_cookies "$RC" "$ERRL"; then
+    COOKIES="$(cookies_flag "$COOKIE_BROWSER")"
+    if [ -n "$COOKIES" ]; then
+      # shellcheck disable=SC2086
+      PYTHONUNBUFFERED=1 yt-dlp $COOKIES "$@" 2>"$ERRL"
+      RC=$?
+    fi
+  fi
+  if [ "$RC" -ne 0 ]; then cat "$ERRL"; fi
+  rm -f "$ERRL"
+  return $RC
+}
+
+case "$CMD" in
+  download)
+    URL="$1"
+    QUALITY="$2"
+    OUTPUT="$3"
+    COOKIE_BROWSER="$4"
+    EXTRA="$5"
+
+    # Extra args are trusted from the user config; word-split on purpose.
+    # shellcheck disable=SC2086
+    case "$QUALITY" in
+      1080p) run_with_retry --no-playlist --newline $EXTRA -f "b[height<=1080]/b" -o "$OUTPUT" "$URL" ;;
+      720p) run_with_retry --no-playlist --newline $EXTRA -f "b[height<=720]/b" -o "$OUTPUT" "$URL" ;;
+      480p) run_with_retry --no-playlist --newline $EXTRA -f "b[height<=480]/b" -o "$OUTPUT" "$URL" ;;
+      audio) run_with_retry --no-playlist --newline $EXTRA -f "ba/b" -o "$OUTPUT" "$URL" ;;
+      *) run_with_retry --no-playlist --newline $EXTRA -f "b" -o "$OUTPUT" "$URL" ;;
+    esac
+    ;;
+    
+  title)
+    URL="$1"
+    COOKIE_BROWSER="$2"
+    EXTRA="$3"
+    # shellcheck disable=SC2086
+    run_with_retry --no-playlist --print "%(title)s" --no-warnings $EXTRA "$URL"
+    ;;
+    
+check)
+    command -v yt-dlp >/dev/null 2>&1 && command -v jq >/dev/null 2>&1 && command -v sqlite3 >/dev/null 2>&1
+    ;;
+
+  prune-missing)
+    # Print a JSON array of filepaths of completed downloads that no longer
+    # exist on disk so the service can drop them from the panel. Cancelled and
+    # failed downloads stay in history even without a file. Leaves the file alone.
+    jq -r '.[] | select(.status == "done") | select((.filepath // "") != "") | .filepath' "$1" |
+    while IFS= read -r fp; do
+      case "$fp" in
+        "~/"*) fp="$HOME/${fp#\~/}" ;;
+        "~"*) fp="$HOME/${fp#\~}" ;;
+      esac
+      [ -f "$fp" ] || printf '%s\n' "$fp"
+    done | jq -R . | jq -sc .
+    ;;
+
+  cleanup)
+    # Remove yt-dlp leftovers after a cancelled/failed download: the main
+    # ".part" plus any fragment parts and the ".ytdl" info file.
+    BASE="$1"
+    case "$BASE" in
+      "~/"*) BASE="$HOME/${BASE#\~/}" ;;
+      "~"*) BASE="$HOME/${BASE#\~}" ;;
+    esac
+    [ -z "$BASE" ] || rm -f "${BASE}.part"* "${BASE}.ytdl" "${BASE}.info.json"
+    ;;
+
+  *)
+    echo "Unknown command: $CMD" >&2
+    exit 1
+    ;;
+esac
