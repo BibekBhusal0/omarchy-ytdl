@@ -6,7 +6,25 @@ shift
 
 SCRIPT_DIR="$(dirname "$0")"
 
-# Resolve a --cookies-from-browser flag for the given browser name.
+# Recursively kill every process under PID $1. Quickshell signals only its
+# direct child (this script); without this, yt-dlp and its ffmpeg children
+# would be orphaned and keep downloading after a cancel.
+_kill_tree() {
+  for C in $(ps -o pid= --ppid "$1" 2>/dev/null); do
+    _kill_tree "$C"
+    kill -KILL "$C" 2>/dev/null
+  done
+}
+
+# Temp dir holding an exported cookie DB (zen/glide). Removed on exit so
+# authentication material never persists outside the browser profile.
+COOKIE_TMP=""
+trap '[ -n "$COOKIE_TMP" ] && rm -rf "$COOKIE_TMP"' EXIT
+# On TERM/INT (a cancel) kill the whole yt-dlp tree and exit; the EXIT trap
+# then drops the cookie temp dir. Without `exit` the shell would only clean
+# cookies and keep waiting on yt-dlp, surviving the cancel.
+trap '_kill_tree $$; exit 0' INT TERM
+
 cookies_flag() {
   BROWSER="$1"
   [ -z "$BROWSER" ] || [ "$BROWSER" = "none" ] && return 0
@@ -18,6 +36,7 @@ cookies_flag() {
       PROFILE="$(find_ff_profile ~/.config/zen)"
       [ -z "$PROFILE" ] && PROFILE=~/.config/zen
       OUT="$(mktemp -d)"
+      COOKIE_TMP="$OUT"
       export_cookies "$PROFILE" "$OUT" youtube && echo "--cookies-from-browser firefox:$OUT" || echo ""
       ;;
     helium)
@@ -35,6 +54,7 @@ cookies_flag() {
       [ -z "$PROFILE" ] && PROFILE="$(find ~/.config/glide -maxdepth 2 -name cookies.sqlite 2>/dev/null | head -1 | xargs dirname 2>/dev/null)"
       [ -z "$PROFILE" ] && PROFILE=~/.config/glide
       OUT="$(mktemp -d)"
+      COOKIE_TMP="$OUT"
       export_cookies "$PROFILE" "$OUT" youtube && echo "--cookies-from-browser firefox:$OUT" || echo ""
       ;;
     *) echo "" ;;
@@ -134,9 +154,53 @@ case "$CMD" in
     # shellcheck disable=SC2086
     run_with_retry --no-playlist --print "%(title)s" --no-warnings $EXTRA "$URL"
     ;;
+
+  playlist-items)
+    URL="$1"
+    COOKIE_BROWSER="$2"
+    EXTRA="$3"
+    # Flat-resolve the playlist to id/title/url so the service can queue each
+    # video as its own sequential download.
+    # shellcheck disable=SC2086
+    run_with_retry --flat-playlist --print "$(printf '%s\t%s\t%s' '%(id)s' '%(title)s' '%(url)s')" $EXTRA "$URL" |
+      jq -R 'split("\t") | select(length == 3) | {id: .[0], title: .[1], url: .[2]}' |
+      jq -sc .
+    ;;
+
+  playlist-info)
+    URL="$1"
+    COOKIE_BROWSER="$2"
+    EXTRA="$3"
+    # Print "<playlist title>\t<video count>" for the "Playlist detected" panel
+    # preview. --playlist-items 1 limits this to a single metadata request.
+    # shellcheck disable=SC2086
+    run_with_retry --flat-playlist --playlist-items 1 \
+      --print "$(printf '%s\t%s' '%(playlist_title)s' '%(playlist_count)s')" $EXTRA "$URL"
+    ;;
     
 check)
     command -v yt-dlp >/dev/null 2>&1 && command -v jq >/dev/null 2>&1 && command -v sqlite3 >/dev/null 2>&1
+    ;;
+
+  kill-tree)
+    _kill_tree "$1"
+    kill -KILL "$1" 2>/dev/null
+    ;;
+
+  cancel)
+    # Kill the tree under PID $1, wait for it to be reaped, then remove the
+    # partial files for $2. Cleaning only after the tree is dead stops the
+    # dying yt-dlp from re-creating a fragment we already removed.
+    _kill_tree "$1"
+    kill -KILL "$1" 2>/dev/null
+    i=0
+    while [ $i -lt 40 ] && kill -0 "$1" 2>/dev/null; do sleep 0.05; i=$((i + 1)); done
+    BASE="$2"
+    case "$BASE" in
+      "~/"*) BASE="$HOME/${BASE#\~/}" ;;
+      "~"*) BASE="$HOME/${BASE#\~}" ;;
+    esac
+    [ -z "$BASE" ] || rm -f "${BASE}.part"* "${BASE}.ytdl" "${BASE}.info.json"
     ;;
 
   prune-missing)

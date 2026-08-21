@@ -27,6 +27,28 @@ Item {
     }
     return n
   }
+  readonly property int queuedCount: {
+    var n = 0
+    for (var i = 0; i < downloads.length; i++) {
+      if (downloads[i].status === "queued")
+        n++
+    }
+    return n
+  }
+
+  // Playlist resolution state. Enumerated videos are queued into `downloads`
+  // like any other download (status "queued") and start as procs free up.
+  property string _playlistQuality: "1080p"
+  property string _playlistError: ""
+
+  // "Playlist detected" preview: name and video count for URLs carrying a
+  // `list=` param, resolved lazily from the panel input.
+  property string playlistInfoUrl: ""
+  property string playlistInfoName: ""
+  property int playlistInfoCount: 0
+  property bool playlistInfoLoading: false
+  property bool playlistInfoError: false
+  property int _playlistInfoReq: 0
 
   property var history: []
   readonly property int historyCount: history.length
@@ -48,7 +70,6 @@ Item {
 
   readonly property string scriptPath: Qt.resolvedUrl("ytdl").toString().replace(/^file:\/\//, "")
 
-  // Download entry factory.
   Component {
     id: downloadComp
     QtObject {
@@ -62,6 +83,9 @@ Item {
       property string filepath: ""
       property string error: ""
       property int procIdx: -1
+      property string _quality: "1080p"
+      property bool _playlistItem: false
+      property bool _playlistPlaceholder: false
     }
   }
 
@@ -195,7 +219,31 @@ Item {
   }
 
   function isYouTubeUrl(text) {
-    return /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)[\w-]+/.test(text)
+    return /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:watch\?v=|shorts\/|playlist\?list=)|youtu\.be\/)[\w-]+/.test(text)
+  }
+
+  // A pure playlist URL (no video id) downloads the whole playlist. Watch URLs
+  // copied from a playlist page (v=...&list=...) download just that video; the
+  // "Playlist detected" panel section offers the playlist separately.
+  function isPlaylistUrl(url) {
+    if (!/[?&]list=/.test(url)) return false
+    return !root.extractVideoId(url)
+  }
+
+  // True when `url` is already downloading or waiting in the queue. Matches by
+  // video id too, so a watch URL copied with a `list=` param is seen as the
+  // same download as its bare-watch twin already in progress.
+  function isUrlBusy(url) {
+    url = cleanUrl(url)
+    var vid = root.extractVideoId(url)
+    for (var i = 0; i < downloads.length; i++) {
+      var d = downloads[i]
+      var s = d.status
+      if (s !== "downloading" && s !== "merging" && s !== "queued") continue
+      if (d.url === url) return true
+      if (vid && root.extractVideoId(d.url) === vid) return true
+    }
+    return false
   }
 
   function updateDownload(id, props) {
@@ -224,23 +272,72 @@ Item {
 
   function findFreeProc() {
     for (var i = 0; i < 3; i++) {
-      if (!procAt(i).running) return i
+      var p = procAt(i)
+      if (!p._draining && !p.running) return i
     }
     return -1
   }
 
-  function startDownload(url, quality) {
+  // Self-heal proc/download desyncs that a race can leave behind (e.g. a
+  // process kept running after its record was cancelled, or a promoted item
+  // whose record lost its "downloading" status). If a proc has a live process
+  // but no record tracks it, reattach it to the queued item for the same video
+  // so it shows as active; if none matches, kill the stray process. Runs on a
+  // short timer so any desync repairs itself within a tick.
+  function reconcileProcs() {
+    for (var i = 0; i < 3; i++) {
+      var p = procAt(i)
+      if (!p.running) continue
+      var tracked = false
+      for (var j = 0; j < downloads.length; j++) {
+        if (downloads[j].status === "downloading" && downloads[j].procIdx === i) {
+          tracked = true
+          break
+        }
+      }
+      if (tracked) continue
+      var pvid = root.extractVideoId(p._url)
+      var target = -1
+      for (var k = 0; k < downloads.length; k++) {
+        var q = downloads[k]
+        if (q.status !== "queued") continue
+        if (pvid && root.extractVideoId(q.url) === pvid) { target = k; break }
+      }
+      if (target >= 0) {
+        var t = downloads[target]
+        p.downloadId = t.dwnId
+        p._errBuf = ""
+        t.procIdx = i
+        t.status = "downloading"
+        downloadsUpdated()
+      } else {
+        var pid = p.processId
+        if (pid && typeof pid === "number" && pid > 0)
+          Quickshell.execDetached([scriptPath, "kill-tree", String(pid)])
+        p._draining = true
+      }
+    }
+  }
+
+  function startDownload(url, quality, isPlaylistItem, knownTitle) {
     url = cleanUrl(url)
     if (!url) return
-
-    for (var i = 0; i < downloads.length; i++) {
-      if (downloads[i].url === url && (downloads[i].status === "downloading" || downloads[i].status === "merging"))
-        return
+    if (!isPlaylistItem && root.isPlaylistUrl(url)) {
+      root.startPlaylist(url, quality)
+      return
     }
 
-    var procIdx = findFreeProc()
-    if (procIdx === -1) {
-      return
+    // Skip if an active or queued entry already carries this URL. Match by
+    // video id too, so a watch URL copied with a `list=` param is seen as the
+    // same download as its bare-watch twin already in progress. Without this a
+    // video can end up with two records (one running, one queued) and the
+    // queued copy looks like it downloads by itself.
+    var vid = root.extractVideoId(url)
+    for (var i = 0; i < downloads.length; i++) {
+      var s = downloads[i].status
+      if (s !== "downloading" && s !== "merging" && s !== "queued") continue
+      if (downloads[i].url === url) return
+      if (vid && root.extractVideoId(downloads[i].url) === vid) return
     }
 
     var id = Date.now() + Math.floor(Math.random() * 1000)
@@ -251,20 +348,141 @@ Item {
     var d = downloadComp.createObject(root)
     d.dwnId = id
     d.url = url
-    d.title = extractVideoId(url) || url
-    d.procIdx = procIdx
+    d.title = knownTitle || extractVideoId(url) || url
+    d.procIdx = -1
+    d._quality = q
+    d._playlistItem = !!isPlaylistItem
+
+    var procIdx = findFreeProc()
+    if (procIdx === -1) {
+      // All three slots busy: sit in the queue until one frees up. Fetch the
+      // title now so the queue shows a real name instead of a video id; the
+      // Destination line only appears once the download actually runs.
+      d.status = "queued"
+      downloads = downloads.concat([d])
+      downloadsUpdated()
+      root._fetchTitle(id, url)
+      return
+    }
 
     downloads = downloads.concat([d])
     downloadsUpdated()
 
     var proc = procAt(procIdx)
     proc.downloadId = id
+    proc._errBuf = ""
+    proc._url = url
     proc.command = cmd
     proc.running = true
+    d.procIdx = procIdx
 
-    titleProc.targetId = id
-    titleProc.command = [scriptPath, "title", url, cookiesBrowser, extraArgs]
-    titleProc.running = true
+    root._fetchTitle(id, url)
+  }
+
+  // Start queued downloads on any free procs, in FIFO order. Called whenever a
+  // proc frees up (a download completes or is cancelled).
+  function _startNextQueued() {
+    for (var i = 0; i < downloads.length; i++) {
+      if (downloads[i].status !== "queued") continue
+      var procIdx = findFreeProc()
+      if (procIdx === -1) return
+      var d = downloads[i]
+      var outputTemplate = downloadLocation + "/%(title)s.%(ext)s"
+      var cmd = [scriptPath, "download", d.url, d._quality, outputTemplate, cookiesBrowser, extraArgs]
+      var proc = procAt(procIdx)
+      proc.downloadId = d.dwnId
+      proc._errBuf = ""
+      proc._url = d.url
+      proc.command = cmd
+      proc.running = true
+      d.procIdx = procIdx
+      d.status = "downloading"
+      downloadsUpdated()
+      root._fetchTitle(d.dwnId, d.url)
+    }
+  }
+
+  function clearQueue() {
+    var remaining = []
+    for (var i = 0; i < downloads.length; i++) {
+      if (downloads[i].status !== "queued") remaining.push(downloads[i])
+    }
+    downloads = remaining
+    downloadsUpdated()
+  }
+
+  function removeQueued(id) {
+    for (var i = 0; i < downloads.length; i++) {
+      if (downloads[i].dwnId === id && downloads[i].status === "queued") {
+        downloads = removeById(downloads, id)
+        downloadsUpdated()
+        return
+      }
+    }
+  }
+
+  function cancelAll() {
+    var ids = []
+    for (var i = 0; i < downloads.length; i++) {
+      if (downloads[i].status === "downloading" || downloads[i].status === "merging")
+        ids.push(downloads[i].dwnId)
+    }
+    for (var j = 0; j < ids.length; j++)
+      root.cancelDownload(ids[j])
+  }
+
+  // Resolve a playlist to its individual videos, then queue them as normal
+  // downloads (they start as procs free up, like any pasted video). A
+  // placeholder entry gives feedback while the flat enumeration runs.
+  function startPlaylist(url, quality) {
+    root._playlistQuality = quality || defaultQuality
+    root._playlistError = ""
+    var id = Date.now() + Math.floor(Math.random() * 1000)
+    var d = downloadComp.createObject(root)
+    d.dwnId = id
+    d.url = url
+    d.title = "Resolving playlist\u2026"
+    d.procIdx = -1
+    d._playlistPlaceholder = true
+
+    downloads = downloads.concat([d])
+    downloadsUpdated()
+
+    playlistProc.downloadId = id
+    playlistProc.command = [scriptPath, "playlist-items", url, cookiesBrowser, extraArgs]
+    playlistProc.running = true
+  }
+
+  // Resolve a playlist's title and video count for the "Playlist detected"
+  // panel preview. Debounced by the panel; stale in-flight fetches are dropped
+  // via a request counter, so a fast retype can't surface an old result.
+  function fetchPlaylistInfo(url) {
+    url = cleanUrl(url)
+    // Only video URLs copied from a playlist page (v=...&list=...) need the
+    // preview; a bare playlist URL downloads the whole playlist via the main
+    // button already, so there is nothing to surface.
+    if (!url || !/[?&]list=/.test(url) || !root.extractVideoId(url)) {
+      root.clearPlaylistInfo()
+      return
+    }
+    root._playlistInfoReq++
+    if (playlistInfoProc.running) playlistInfoProc.running = false
+    playlistInfoProc._req = root._playlistInfoReq
+    playlistInfoProc.command = [scriptPath, "playlist-info", url, cookiesBrowser, extraArgs]
+    playlistInfoProc.running = true
+    root.playlistInfoUrl = url
+    root.playlistInfoName = ""
+    root.playlistInfoCount = 0
+    root.playlistInfoLoading = true
+    root.playlistInfoError = false
+  }
+
+  function clearPlaylistInfo() {
+    root.playlistInfoUrl = ""
+    root.playlistInfoName = ""
+    root.playlistInfoCount = 0
+    root.playlistInfoLoading = false
+    root.playlistInfoError = false
   }
 
   function retryDownload(item) {
@@ -277,12 +495,40 @@ Item {
     for (var i = 0; i < downloads.length; i++) {
       var d = downloads[i]
       if (d.dwnId === id) {
+        if (d.status === "queued") {
+          root.downloads = root.removeById(root.downloads, id)
+          root.downloadsUpdated()
+          return
+        }
+        if (d._playlistPlaceholder) {
+          if (playlistProc.running) playlistProc.running = false
+          playlistProc.downloadId = -1
+          root.downloads = root.removeById(root.downloads, id)
+          root.downloadsUpdated()
+          return
+        }
         if (d.procIdx >= 0) {
           var proc = procAt(d.procIdx)
+          var pid = proc.processId
           proc.downloadId = -1
-          if (proc.running) proc.running = false
+          if (proc.running) {
+            // Mark the proc as draining so no new download starts on it until
+            // its process has actually exited (onExited clears the flag).
+            proc._draining = true
+            proc.running = false
+          }
         }
-        if (d.filepath) Quickshell.execDetached([scriptPath, "cleanup", d.filepath])
+        if (d.filepath) {
+          if (pid && typeof pid === "number" && pid > 0) {
+            // Kill the whole tree (shell + yt-dlp + ffmpeg), wait for it to
+            // die, then drop the partials. Quickshell only SIGTERMs the direct
+            // child, which would otherwise orphan yt-dlp and leave it
+            // downloading in the background.
+            Quickshell.execDetached([scriptPath, "cancel", String(pid), d.filepath])
+          } else {
+            Quickshell.execDetached([scriptPath, "cleanup", d.filepath])
+          }
+        }
         d.status = "cancelled"
         d.progress = 0
         d.procIdx = -1
@@ -293,6 +539,9 @@ Item {
         }
         downloadsUpdated()
         historyUpdated()
+        // A proc just freed up (or its exit is imminent); let a queued download
+        // take its slot. Promotion is retried once the process exits.
+        Qt.callLater(root._startNextQueued)
         return
       }
     }
@@ -399,6 +648,8 @@ Item {
           }
           historyUpdated()
         }
+        // A proc just freed up; let a queued download take its slot.
+        Qt.callLater(root._startNextQueued)
         return
       }
     }
@@ -454,18 +705,146 @@ Item {
     }
   }
 
-  // Title fetch process
+  // Title fetch process. `_fetchId` records the entry this process was started
+  // for; the result is only applied if it still matches, so a stale fetch that
+  // raced a new download can't overwrite the new entry's title. `_titleQueue`
+  // holds pending lookups (queued items plus downloads that missed their slot)
+  // and is drained one fetch at a time so every entry gets a real title.
+  property var _titleQueue: []
   Process {
     id: titleProc
     property var targetId: -1
+    property var _fetchId: -1
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
         var title = String(this.text || "").trim()
-        if (title && titleProc.targetId !== -1) {
+        if (title && titleProc.targetId !== -1 && titleProc.targetId === titleProc._fetchId) {
           root.updateDownload(titleProc.targetId, { title: title })
-          titleProc.targetId = -1
         }
+        titleProc.targetId = -1
+        titleProc._fetchId = -1
+        Qt.callLater(root._pumpTitle)
+      }
+    }
+  }
+
+  // Queue a title fetch for `id` and pump the next one if the process is free.
+  // Idempotent per entry: skip requests for entries that already carry a real
+  // title (playlist items, or one applied by a previous fetch or the
+  // Destination line).
+  function _fetchTitle(id, url) {
+    if (id === -1 || !url) return
+    for (var i = 0; i < downloads.length; i++) {
+      var d = downloads[i]
+      if (d.dwnId === id && d.title && d.title !== d.url && d.title !== root.extractVideoId(d.url))
+        return
+    }
+    for (var j = 0; j < _titleQueue.length; j++) {
+      if (_titleQueue[j].id === id) return
+    }
+    _titleQueue.push({ id: id, url: url })
+    root._pumpTitle()
+  }
+
+  function _pumpTitle() {
+    if (titleProc.running || _titleQueue.length === 0) return
+    var item = _titleQueue.shift()
+    titleProc.targetId = item.id
+    titleProc._fetchId = item.id
+    titleProc.command = [scriptPath, "title", item.url, cookiesBrowser, extraArgs]
+    titleProc.running = true
+  }
+
+  // Playlist metadata fetch for the "Playlist detected" panel preview. The
+  // request counter in `_req` ties results to the fetch that started them.
+  Process {
+    id: playlistInfoProc
+    property int _req: -1
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        if (playlistInfoProc._req !== root._playlistInfoReq) return
+        var parts = String(this.text || "").trim().split("\t")
+        if (parts.length >= 2 && parts[0]) {
+          root.playlistInfoName = parts[0]
+          root.playlistInfoCount = parseInt(parts[1], 10) || 0
+          root.playlistInfoError = false
+        } else {
+          root.playlistInfoError = true
+        }
+        root.playlistInfoLoading = false
+      }
+    }
+    onExited: function(exitCode) {
+      if (playlistInfoProc._req !== root._playlistInfoReq) return
+      if (exitCode !== 0) {
+        root.playlistInfoError = true
+        root.playlistInfoLoading = false
+      }
+    }
+  }
+
+  // Playlist enumeration process. Flat-resolves the playlist to a JSON array
+  // of {id, title, url}; each entry is then queued as its own download.
+  Process {
+    id: playlistProc
+    property var downloadId: -1
+    property string _errBuf: ""
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        var id = playlistProc.downloadId
+        playlistProc.downloadId = -1
+        if (id === -1) return
+        var items = []
+        var text = String(this.text || "").trim()
+        if (text) {
+          try {
+            var parsed = JSON.parse(text)
+            if (Array.isArray(parsed)) {
+              for (var i = 0; i < parsed.length; i++) {
+                var it = parsed[i] || {}
+                if (it.url) {
+                  items.push({ url: it.url, title: it.title || "", quality: root._playlistQuality })
+                }
+              }
+            }
+          } catch (e) { /* malformed enumeration output, treat as empty */ }
+        }
+        if (items.length === 0) {
+          // Resolution failed; surface the error on the placeholder entry.
+          var err = root._playlistError || "Could not resolve playlist"
+          for (var j = 0; j < root.downloads.length; j++) {
+            var d = root.downloads[j]
+            if (d.dwnId === id) {
+              d.status = "error"
+              d.error = err
+              root.downloads = root.removeById(root.downloads, id)
+              if (root.enableHistory) {
+                root.history = [d].concat(root.history)
+                root.persistHistory()
+              }
+              root.historyUpdated()
+              root.downloadsUpdated()
+              break
+            }
+          }
+        } else {
+          root.downloads = root.removeById(root.downloads, id)
+          root.downloadsUpdated()
+          // Queue every video as its own download; up to three start now and
+          // the rest wait for a free slot.
+          for (var k = 0; k < items.length; k++)
+            root.startDownload(items[k].url, items[k].quality, true, items[k].title)
+        }
+      }
+    }
+    stderr: SplitParser {
+      onRead: function(line) {
+        playlistProc._errBuf += line + "\n"
+        if (line.indexOf("ERROR") !== -1)
+          root._playlistError = line.replace(/^ERROR:\s*/, "")
       }
     }
   }
@@ -475,6 +854,8 @@ Item {
     objectName: "dlProc0"
     property var downloadId: -1
     property string _errBuf: ""
+    property bool _draining: false
+    property string _url: ""
     stdout: SplitParser { onRead: function(line) { root.parseLine(dlProc0, line) } }
     stderr: SplitParser { onRead: function(line) { dlProc0._errBuf += line + "\n" } }
     onExited: function(exitCode) {
@@ -490,6 +871,10 @@ Item {
       dlProc0._errBuf = ""
       root.onDownloadComplete(downloadId, exitCode)
       downloadId = -1
+      dlProc0._url = ""
+      dlProc0._draining = false
+      // The process really exited now, so a queued download can take its slot.
+      Qt.callLater(root._startNextQueued)
     }
   }
 
@@ -498,6 +883,8 @@ Item {
     objectName: "dlProc1"
     property var downloadId: -1
     property string _errBuf: ""
+    property bool _draining: false
+    property string _url: ""
     stdout: SplitParser { onRead: function(line) { root.parseLine(dlProc1, line) } }
     stderr: SplitParser { onRead: function(line) { dlProc1._errBuf += line + "\n" } }
     onExited: function(exitCode) {
@@ -513,6 +900,9 @@ Item {
       dlProc1._errBuf = ""
       root.onDownloadComplete(downloadId, exitCode)
       downloadId = -1
+      dlProc1._url = ""
+      dlProc1._draining = false
+      Qt.callLater(root._startNextQueued)
     }
   }
 
@@ -521,6 +911,8 @@ Item {
     objectName: "dlProc2"
     property var downloadId: -1
     property string _errBuf: ""
+    property bool _draining: false
+    property string _url: ""
     stdout: SplitParser { onRead: function(line) { root.parseLine(dlProc2, line) } }
     stderr: SplitParser { onRead: function(line) { dlProc2._errBuf += line + "\n" } }
     onExited: function(exitCode) {
@@ -536,7 +928,20 @@ Item {
       dlProc2._errBuf = ""
       root.onDownloadComplete(downloadId, exitCode)
       downloadId = -1
+      dlProc2._url = ""
+      dlProc2._draining = false
+      Qt.callLater(root._startNextQueued)
     }
+  }
+
+  // Watchdog for proc/download desyncs (see reconcileProcs). Fires rarely; the
+  // cost is a scan of 3 procs and the downloads list.
+  Timer {
+    id: reconcileTimer
+    interval: 2000
+    repeat: true
+    running: true
+    onTriggered: root.reconcileProcs()
   }
 
   // One-shot clipboard read, run when the panel opens.
@@ -574,7 +979,6 @@ Item {
     }
   }
 
-  // Installation check
   function checkInstallation() {
     if (whichProc.running) return
     root.checkingInstallation = true

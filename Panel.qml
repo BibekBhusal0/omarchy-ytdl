@@ -32,8 +32,11 @@ Panel {
   readonly property bool installed: ytdlService ? ytdlService.installed : false
   readonly property int activeCount: ytdlService ? ytdlService.activeCount : 0
   readonly property var activeDownloads: ytdlService ? filterActive(ytdlService.downloads) : []
+  readonly property int queuedCount: ytdlService ? ytdlService.queuedCount : 0
+  readonly property var queuedDownloads: ytdlService ? filterQueued(ytdlService.downloads) : []
   readonly property int historyCount: ytdlService ? ytdlService.historyCount : 0
   readonly property var historyItems: ytdlService ? ytdlService.history : []
+  readonly property bool playlistSectionVisible: ytdlService && ytdlService.playlistInfoUrl !== ""
 
   onInputUrlChanged: {
     if (inputUrl && urlInput.text !== inputUrl)
@@ -49,6 +52,14 @@ Panel {
     var r = []
     for (var i = 0; i < list.length; i++)
       if (list[i].status === "downloading" || list[i].status === "merging")
+        r.push(list[i])
+    return r
+  }
+
+  function filterQueued(list) {
+    var r = []
+    for (var i = 0; i < list.length; i++)
+      if (list[i].status === "queued")
         r.push(list[i])
     return r
   }
@@ -82,6 +93,11 @@ Panel {
   function pasteClipboard() {
     if (!ytdlService) return
     ytdlService.checkClipboard(function(url) {
+      // Don't re-offer a link that is already downloading or queued.
+      if (!url || ytdlService.isUrlBusy(url)) {
+        root.clipboardUrl = ""
+        return
+      }
       root.clipboardUrl = url
       root.inputUrl = url
       if (urlInput.text !== url) urlInput.text = url
@@ -122,6 +138,7 @@ Panel {
     if (!root.installed && !(ytdlService && ytdlService.checkingInstallation)) s.push("install")
     if (root.installed) s.push("input")
     if (root.installed && root.activeCount > 0) s.push("downloads")
+    if (root.installed && root.queuedCount > 0) s.push("queue")
     if (root.installed && root.historyCount > 0) s.push("history")
     return s
   }
@@ -130,6 +147,7 @@ Panel {
     if (name === "install") return 1
     if (name === "input") return 3
     if (name === "downloads") return root.activeCount
+    if (name === "queue") return root.queuedCount
     if (name === "history") return root.historyCount
     return 0
   }
@@ -194,6 +212,9 @@ Panel {
     } else if (s === "downloads") {
       var d = root.activeDownloads[root.selectedIndex]
       if (d && ytdlService) ytdlService.cancelDownload(d.dwnId)
+    } else if (s === "queue") {
+      var q = root.queuedDownloads[root.selectedIndex]
+      if (q && ytdlService) ytdlService.removeQueued(q.dwnId)
     } else if (s === "history") {
       var h = root.historyItems[root.selectedIndex]
       if (!h || !ytdlService) return
@@ -207,6 +228,9 @@ Panel {
     if (root.focusSection === "downloads") {
       var d = root.activeDownloads[root.selectedIndex]
       if (d && ytdlService) ytdlService.cancelDownload(d.dwnId)
+    } else if (root.focusSection === "queue") {
+      var q = root.queuedDownloads[root.selectedIndex]
+      if (q && ytdlService) ytdlService.removeQueued(q.dwnId)
     } else if (root.focusSection === "history") {
       var h = root.historyItems[root.selectedIndex]
       if (h && ytdlService) ytdlService.removeHistoryItem(h.dwnId)
@@ -223,6 +247,8 @@ Panel {
     var item = null
     if (root.focusSection === "downloads" && root.selectedIndex >= 0 && activeRepeater.count > 0)
       item = activeRepeater.itemAt(root.selectedIndex)
+    else if (root.focusSection === "queue" && root.selectedIndex >= 0 && queueRepeater.count > 0)
+      item = queueRepeater.itemAt(root.selectedIndex)
     else if (root.focusSection === "history" && root.selectedIndex >= 0 && historyRepeater.count > 0)
       item = historyRepeater.itemAt(root.selectedIndex)
     if (!item) return
@@ -241,6 +267,15 @@ Panel {
     }
   }
 
+  onQueuedCountChanged: {
+    if (root.queuedCount === 0 && root.focusSection === "queue" && root.cursorActive) {
+      root.focusSection = "input"
+      root.selectedIndex = 0
+    } else if (root.focusSection === "queue") {
+      root.clampIndex()
+    }
+  }
+
   onHistoryCountChanged: {
     if (root.historyCount === 0 && root.focusSection === "history" && root.cursorActive) {
       root.focusSection = "input"
@@ -252,6 +287,16 @@ Panel {
 
   Component.onCompleted: {
     if (ytdlService) ytdlService.checkInstallation()
+  }
+
+  // Debounces the playlist-info lookup while the user types or edits the URL.
+  Timer {
+    id: playlistInfoTimer
+    interval: 450
+    repeat: false
+    onTriggered: {
+      if (ytdlService) ytdlService.fetchPlaylistInfo(root.inputUrl)
+    }
   }
 
   KeyboardPanel {
@@ -290,7 +335,6 @@ Panel {
           width: parent.width
           spacing: Style.space(16)
 
-          // Not installed state
           Column {
             visible: !root.installed && root.ytdlService && !root.ytdlService.checkingInstallation
             width: parent.width
@@ -364,7 +408,6 @@ Panel {
             }
           }
 
-          // URL input section (when installed)
           Column {
             visible: root.installed
             width: parent.width
@@ -389,6 +432,7 @@ Panel {
                 onTextChanged: {
                   root.inputUrl = text
                   if (text !== root.clipboardUrl) root.clipboardUrl = ""
+                  playlistInfoTimer.restart()
                 }
                 Keys.onEscapePressed: root.focusPanel()
               }
@@ -458,7 +502,78 @@ Panel {
             }
           }
 
-          // Active downloads
+          // Playlist detected: a video URL copied from a playlist page offers the
+          // whole playlist as an explicit action instead of surprising downloads.
+          Column {
+            visible: root.playlistSectionVisible
+            width: parent.width
+            spacing: Style.space(8)
+
+            Rectangle {
+              width: parent.width
+              height: 1
+              color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.08)
+            }
+
+            RowLayout {
+              width: parent.width
+              spacing: Style.space(8)
+
+              Column {
+                Layout.fillWidth: true
+                spacing: Style.space(2)
+
+                Text {
+                  width: parent.width
+                  text: "Playlist detected"
+                  color: root.activeColor
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.caption
+                  font.bold: true
+                  elide: Text.ElideRight
+                }
+
+                Text {
+                  width: parent.width
+                  text: ytdlService
+                    ? (ytdlService.playlistInfoLoading ? "Resolving playlist\u2026"
+                       : ytdlService.playlistInfoError ? "Could not resolve playlist"
+                       : ytdlService.playlistInfoName
+                         ? ytdlService.playlistInfoName + " \u00b7 " + ytdlService.playlistInfoCount
+                           + (ytdlService.playlistInfoCount === 1 ? " video" : " videos")
+                         : "")
+                    : ""
+                  color: Qt.darker(root.foreground, 1.4)
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.caption
+                  elide: Text.ElideRight
+                  maximumLineCount: 1
+                }
+              }
+
+              Button {
+                iconText: ""
+                tooltipText: "Download the whole playlist"
+                foreground: root.foreground
+                accent: root.activeColor
+                iconSize: Style.font.icon
+                implicitWidth: Style.space(36)
+                implicitHeight: Style.space(36)
+                horizontalPadding: 0
+                verticalPadding: 0
+                onClicked: {
+                  if (ytdlService && ytdlService.playlistInfoUrl) {
+                    ytdlService.startPlaylist(ytdlService.playlistInfoUrl, root.selectedQuality)
+                    ytdlService.clearPlaylistInfo()
+                    root.clipboardUrl = ""
+                    root.inputUrl = ""
+                    urlInput.text = ""
+                  }
+                }
+              }
+            }
+          }
+
           Column {
             visible: root.installed && root.activeCount > 0
             width: parent.width
@@ -470,13 +585,31 @@ Panel {
               color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.08)
             }
 
-            Text {
+            RowLayout {
               width: parent.width
-              text: " Active Downloads (" + root.activeCount + ")"
-              color: root.foreground
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.caption
-              font.bold: true
+              spacing: Style.space(8)
+
+              Text {
+                Layout.fillWidth: true
+                text: " Active Downloads (" + root.activeCount + ")"
+                color: root.foreground
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+                font.bold: true
+                elide: Text.ElideRight
+              }
+
+              PanelActionButton {
+                iconText: "󰅙"
+                tooltipText: "Cancel all downloads"
+                foreground: root.foreground
+                hoverColor: Color.urgent
+                fontFamily: root.fontFamily
+                fontSize: Style.font.bodySmall
+                onClicked: {
+                  if (ytdlService) ytdlService.cancelAll()
+                }
+              }
             }
 
             Repeater {
@@ -577,7 +710,112 @@ Panel {
             }
           }
 
-          // History section
+          // Queue section: downloads waiting for a free slot (max 3 parallel).
+          Column {
+            visible: root.installed && root.queuedCount > 0
+            width: parent.width
+            spacing: Style.space(8)
+
+            Rectangle {
+              width: parent.width
+              height: 1
+              color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.08)
+            }
+
+            RowLayout {
+              width: parent.width
+              spacing: Style.space(8)
+
+              Text {
+                Layout.fillWidth: true
+                text: "󰐑 Queue (" + root.queuedCount + ")"
+                color: root.foreground
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+                font.bold: true
+                elide: Text.ElideRight
+              }
+
+              PanelActionButton {
+                iconText: ""
+                tooltipText: "Clear queue"
+                foreground: root.foreground
+                hoverColor: Color.urgent
+                fontFamily: root.fontFamily
+                fontSize: Style.font.bodySmall
+                onClicked: {
+                  if (ytdlService) ytdlService.clearQueue()
+                }
+              }
+            }
+
+            Repeater {
+              id: queueRepeater
+              model: root.queuedDownloads
+
+              delegate: CursorSurface {
+                width: parent.width
+                height: qBody.implicitHeight + Style.space(12)
+                foreground: root.foreground
+                accent: root.activeColor
+                hasCursor: root.cursorActive && root.focusSection === "queue" && root.selectedIndex === index
+
+                MouseArea {
+                  anchors.fill: parent
+                  hoverEnabled: true
+                  onContainsMouseChanged: if (containsMouse) root.focusSectionAt("queue", index)
+                  onClicked: root.focusSectionAt("queue", index)
+                }
+
+                RowLayout {
+                  id: qBody
+                  anchors.fill: parent
+                  anchors.margins: Style.space(6)
+                  spacing: Style.space(6)
+
+                  Column {
+                    Layout.fillWidth: true
+                    Layout.alignment: Qt.AlignVCenter
+                    spacing: Style.space(2)
+
+                    Text {
+                      width: parent.width
+                      text: modelData.title || "Unknown"
+                      color: root.foreground
+                      font.family: root.fontFamily
+                      font.pixelSize: Style.font.bodySmall
+                      font.bold: true
+                      elide: Text.ElideRight
+                      maximumLineCount: 1
+                    }
+
+                    Text {
+                      width: parent.width
+                      text: "In queue"
+                      color: Qt.darker(root.foreground, 1.4)
+                      font.family: root.fontFamily
+                      font.pixelSize: Style.font.caption
+                      elide: Text.ElideRight
+                      maximumLineCount: 1
+                    }
+                  }
+
+                  PanelActionButton {
+                    iconText: ""
+                    tooltipText: "Remove from queue"
+                    foreground: root.foreground
+                    hoverColor: Color.urgent
+                    fontFamily: root.fontFamily
+                    fontSize: Style.font.bodySmall
+                    onClicked: {
+                      if (ytdlService) ytdlService.removeQueued(modelData.dwnId)
+                    }
+                  }
+                }
+              }
+            }
+          }
+
           Column {
             visible: root.installed && root.historyCount > 0
               && (!ytdlService || ytdlService.enableHistory)
@@ -741,7 +979,6 @@ Panel {
             }
           }
 
-          // Empty state
           Column {
             visible: root.installed && root.activeCount === 0 && root.historyCount === 0
             width: parent.width
@@ -750,6 +987,7 @@ Panel {
             Item {
               width: parent.width
               implicitHeight: Style.space(48)
+              visible: !root.playlistSectionVisible
 
               Text {
                 anchors.centerIn: parent
@@ -763,7 +1001,7 @@ Panel {
 
             Text {
               width: parent.width
-              text: "Paste a YouTube URL above to start downloading."
+              text: "Paste a YouTube URL or playlist above to start downloading."
               color: Qt.darker(root.foreground, 1.4)
               font.family: root.fontFamily
               font.pixelSize: Style.font.body

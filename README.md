@@ -6,7 +6,8 @@ https://github.com/user-attachments/assets/8a63333c-689c-4793-9ed7-804d2df5b888
 
 ## Features
 
-- **Parallel downloads**: Download up to three videos at once, with live progress
+- **Parallel downloads**: Download up to three videos at once; extras wait in a queue
+- **Playlists**: Paste a playlist URL and its videos download through the same slots
 - **Clipboard detection**: Copy a YouTube link and it is detected automatically in the panel
 - **History**: Past downloads are kept for easy replay
 
@@ -26,7 +27,7 @@ omarchy plugin add https://github.com/BibekBhusal0/omarchy-ytdl.git --enable
 
 ## Usage
 
-Click the bar widget to open the panel. Copy a YouTube link and it is pasted into the input; pick a quality and press the download button (or Enter). Bind it to a key in `~/.config/hypr/bindings.lua`:
+Click the bar widget to open the panel. Copy a YouTube link (single video or playlist) and it is pasted into the input; pick a quality and press the download button (or Enter). Up to three downloads run in parallel; any extra videos (and playlist items) wait in the queue section and start as slots free up. Bind it to a key in `~/.config/hypr/bindings.lua`:
 
 ```lua
 o.bind("SUPER", "Y", "exec, omarchy-shell shell summon bibek.ytdl")
