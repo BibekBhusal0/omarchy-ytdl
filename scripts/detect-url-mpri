@@ -1,0 +1,64 @@
+#!/bin/bash
+# Detect YouTube URL from ANY MPRIS media player
+# Checks all MPRIS services, not just specific browsers
+# Firefox/Zen: xesam:url gives full URL directly
+# Chromium (Helium/Chrome): search by title + verify duration
+
+output_json() {
+    jq -n --compact-output --arg t "$1" --arg u "$2" '{title: $t, url: $u}'
+}
+
+is_youtube_url() {
+    echo "$1" | grep -q "youtube.com/watch\|youtu\.be/\|youtube.com/shorts/"
+}
+
+# Check ALL MPRIS media players
+busctl --user list 2>/dev/null | grep "org.mpris.MediaPlayer2\." | while read -r line; do
+    service=$(echo "$line" | awk '{print $1}')
+
+    raw=$(busctl --user call "$service" /org/mpris/MediaPlayer2 \
+        org.freedesktop.DBus.Properties GetAll \
+        "s" "org.mpris.MediaPlayer2.Player" 2>/dev/null)
+
+    # Skip if no metadata (not playing anything)
+    echo "$raw" | grep -q '"Metadata"' || continue
+
+    # busctl escapes non-ASCII as octal (\360...); \0nnn form decodes via printf %b
+    title=$(echo "$raw" | grep -o '"xesam:title" s "[^"]*"' | sed 's/"xesam:title" s "//;s/\\342\\200\\231/'"'"'/g;s/"$//')
+    [ -z "$title" ] && continue
+
+    # Method 1: Check if xesam:url is a YouTube URL (Firefox/Zen give this)
+    url=$(echo "$raw" | grep -o '"xesam:url" s "[^"]*"' | sed 's/"xesam:url" s "//;s/"$//')
+    if [ -n "$url" ] && is_youtube_url "$url"; then
+        output_json "$title" "$url"
+        continue
+    fi
+
+    # Method 2: No URL (for chromium based browsers)
+    player=${service#*org.mpris.MediaPlayer2.}
+    case "$player" in
+        chromium*|chrome*|brave*|edge*|vivaldi*|helium*) ;;
+        *) continue ;;
+    esac
+
+    # Get duration to verify the match
+    dur_us=$(echo "$raw" | grep -o '"mpris:length" x [0-9]*' | awk '{print $3}')
+    [ -z "$dur_us" ] || [ "$dur_us" -eq 0 ] && continue
+    dur_s=$((dur_us / 1000000))
+
+    result=$(yt-dlp --no-download --print "%(webpage_url)s %(duration)s" \
+        "ytsearch1:${title}" 2>/dev/null)
+    search_url=$(echo "$result" | awk '{print $1}')
+    yt_dur=$(echo "$result" | awk '{print $2}')
+
+    [ -z "$search_url" ] && continue
+
+    # Verify it's YouTube and duration matches
+    if is_youtube_url "$search_url"; then
+        diff=$((dur_s - yt_dur))
+        [ $diff -lt 0 ] && diff=$((-diff))
+        if [ "$diff" -le 3 ]; then
+            output_json "$title" "$search_url"
+        fi
+    fi
+done

@@ -14,6 +14,12 @@ Item {
   property string clipboardUrl: ""
   property var _clipboardCallback: null
 
+  // MPRIS auto-detection state. When a browser is playing a YouTube video,
+  // detectYouTube() populates these so the panel can offer a one-click download.
+  property string detectedUrl: ""
+  property string detectedTitle: ""
+  property bool detecting: false
+
   // Downloads are QObjects mutated in place. The panel's Repeater binds to the
   // array reference, so it keeps its delegates across progress ticks and only
   // rebuilds when an item is added or removed.
@@ -68,7 +74,9 @@ Item {
   signal downloadsUpdated()
   signal historyUpdated()
 
-  readonly property string scriptPath: Qt.resolvedUrl("ytdl").toString().replace(/^file:\/\//, "")
+  readonly property string scriptPath: Qt.resolvedUrl("scripts/ytdl").toString().replace(/^file:\/\//, "")
+  readonly property string detectScriptPath: Qt.resolvedUrl("scripts/detect-url-mpri").toString().replace(/^file:\/\//, "")
+  readonly property string autoDownloadScriptPath: Qt.resolvedUrl("scripts/auto-download.sh").toString().replace(/^file:\/\//, "")
 
   Component {
     id: downloadComp
@@ -230,9 +238,9 @@ Item {
     return !root.extractVideoId(url)
   }
 
-  // True when `url` is already downloading or waiting in the queue. Matches by
-  // video id too, so a watch URL copied with a `list=` param is seen as the
-  // same download as its bare-watch twin already in progress.
+  // True when `url` is already downloading, queued, or already downloaded.
+  // Matches by video id too, so a watch URL copied with a `list=` param is
+  // seen as the same download as its bare-watch twin already in progress.
   function isUrlBusy(url) {
     url = cleanUrl(url)
     var vid = root.extractVideoId(url)
@@ -242,6 +250,12 @@ Item {
       if (s !== "downloading" && s !== "merging" && s !== "queued") continue
       if (d.url === url) return true
       if (vid && root.extractVideoId(d.url) === vid) return true
+    }
+    // Also check history - no point suggesting a video already downloaded
+    for (var j = 0; j < history.length; j++) {
+      var h = history[j]
+      if (h.url === url) return true
+      if (vid && root.extractVideoId(h.url) === vid) return true
     }
     return false
   }
@@ -322,22 +336,10 @@ Item {
   function startDownload(url, quality, isPlaylistItem, knownTitle) {
     url = cleanUrl(url)
     if (!url) return
+    if (root.isUrlBusy(url)) return
     if (!isPlaylistItem && root.isPlaylistUrl(url)) {
       root.startPlaylist(url, quality)
       return
-    }
-
-    // Skip if an active or queued entry already carries this URL. Match by
-    // video id too, so a watch URL copied with a `list=` param is seen as the
-    // same download as its bare-watch twin already in progress. Without this a
-    // video can end up with two records (one running, one queued) and the
-    // queued copy looks like it downloads by itself.
-    var vid = root.extractVideoId(url)
-    for (var i = 0; i < downloads.length; i++) {
-      var s = downloads[i].status
-      if (s !== "downloading" && s !== "merging" && s !== "queued") continue
-      if (downloads[i].url === url) return
-      if (vid && root.extractVideoId(downloads[i].url) === vid) return
     }
 
     var id = Date.now() + Math.floor(Math.random() * 1000)
@@ -619,11 +621,6 @@ Item {
   function playFile(filepath) {
     if (!filepath) return
     Quickshell.execDetached(["xdg-open", filepath])
-  }
-
-  function openFolder(filepath) {
-    if (!filepath) return
-    Quickshell.execDetached(["xdg-open", filepath.replace(/\/[^\/]+$/, "")])
   }
 
   function onDownloadComplete(id, exitCode) {
@@ -979,6 +976,48 @@ Item {
     }
   }
 
+  // MPRIS auto-detection: reads currently playing YouTube from any browser.
+
+  function detectYouTube() {
+    if (detectProc.running) return
+    root.detectedUrl = ""
+    root.detectedTitle = ""
+    root.detecting = true
+    detectProc.command = ["bash", detectScriptPath]
+    detectProc.running = true
+  }
+
+  function clearDetection() {
+    root.detectedUrl = ""
+    root.detectedTitle = ""
+  }
+
+  Process {
+    id: detectProc
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        root.detecting = false
+        var text = String(this.text || "").trim()
+        if (!text) return
+        var lines = text.split("\n")
+        for (var i = 0; i < lines.length; i++) {
+          try {
+            var obj = JSON.parse(lines[i])
+            if (obj.url && root.isYouTubeUrl(obj.url) && !root.isUrlBusy(obj.url)) {
+              root.detectedUrl = obj.url
+              root.detectedTitle = obj.title || ""
+              return
+            }
+          } catch (e) {}
+        }
+      }
+    }
+    stderr: SplitParser {
+      onRead: function(line) {}
+    }
+  }
+
   function checkInstallation() {
     if (whichProc.running) return
     root.checkingInstallation = true
@@ -1030,7 +1069,10 @@ Item {
     function start(url: string): void { root.startDownload(url) }
     function cancel(id: string): void { root.cancelDownload(parseInt(id)) }
     function status(): string { return JSON.stringify({downloads: root.downloadCount, active: root.activeCount}) }
-    function ping(): string { return "pong" }
+    function autoDownload(): string {
+      Quickshell.execDetached([autoDownloadScriptPath])
+      return JSON.stringify({status: "started", message: "Auto-download triggered"})
+    }
     function state(): string {
       var d = root.downloads.map(function(x) {
         return { id: x.dwnId, url: x.url, title: x.title, status: x.status, progress: x.progress, speed: x.speed, eta: x.eta, filepath: x.filepath }

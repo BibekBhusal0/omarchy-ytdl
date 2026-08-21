@@ -9,6 +9,7 @@ https://github.com/user-attachments/assets/8a63333c-689c-4793-9ed7-804d2df5b888
 - **Parallel downloads**: Download up to three videos at once; extras wait in a queue
 - **Playlists**: Paste a playlist URL and its videos download through the same slots
 - **Clipboard detection**: Copy a YouTube link and it is detected automatically in the panel
+- **MPRIS auto-detection**: Detects YouTube videos playing in any browser and offers a one-click download
 - **History**: Past downloads are kept for easy replay
 
 ## Requirements
@@ -17,6 +18,7 @@ https://github.com/user-attachments/assets/8a63333c-689c-4793-9ed7-804d2df5b888
 - yt-dlp (auto-installed from the panel if missing)
 - wl-clipboard (preinstalled on Omarchy) for clipboard detection
 - jq (preinstalled on Omarchy)
+- busctl (preinstalled on Omarchy, part of systemd) for MPRIS detection
 - sqlite3 (preinstalled on Omarchy), only for cookie export from Firefox-based browsers (zen, glide)
 
 ## Install
@@ -27,10 +29,33 @@ omarchy plugin add https://github.com/BibekBhusal0/omarchy-ytdl.git --enable
 
 ## Usage
 
-Click the bar widget to open the panel. Copy a YouTube link (single video or playlist) and it is pasted into the input; pick a quality and press the download button (or Enter). Up to three downloads run in parallel; any extra videos (and playlist items) wait in the queue section and start as slots free up. Bind it to a key in `~/.config/hypr/bindings.lua`:
+Click the bar widget to open the panel. Copy a YouTube link (single video or playlist) and it is pasted into the input; pick a quality and press the download button (or Enter). Up to three downloads run in parallel; any extra videos (and playlist items) wait in the queue section and start as slots free up.
+
+If a browser is playing a YouTube video, the panel detects it automatically via MPRIS and offers a one-click download.
+
+Bind it to a key in `~/.config/hypr/bindings.lua`:
 
 ```lua
 o.bind("SUPER", "Y", "exec, omarchy-shell shell summon bibek.ytdl")
+```
+
+### Auto-download from clipboard or browser
+
+Run the `autoDownload` IPC command to start a download without opening the panel:
+
+```bash
+omarchy shell ytdl autoDownload
+```
+
+It checks browsers via MPRIS for a playing YouTube video first, then falls back to the clipboard. When a video is found you get a notification with its title and source, and the download starts through the same queue as the panel (with progress tracking and history). If nothing is found, a notification says so.
+
+Bind it to a key for one-key downloads:
+
+> [!NOTE]
+> MPRIS detection works differently per browser engine. Firefox based browsers expose the exact URL via `xesam:url`. Chromium-based browsers (Chrome, Helium, Edge, Brave) do not, so the script searches YouTube by title and verifies by duration match. This is best-effort and may fail sometimes.
+
+```lua
+o.bind("SUPER SHIFT", "Y", "exec, omarchy shell ytdl autoDownload")
 ```
 
 ## Configuration
