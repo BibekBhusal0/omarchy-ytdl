@@ -1,0 +1,256 @@
+#!/usr/bin/env python3
+"""Detect the active browser tab URL.
+
+Reads the active window from Hyprland, then extracts the current tab URL:
+- Firefox-based (zen, firefox, glide): reads zen-sessions.jsonlz4 (live updated)
+- Chromium-based (helium, chrome): uses MPRIS metadata + yt-dlp search
+
+Output: JSON with {browser, url, title, is_youtube}
+"""
+
+import json
+import os
+import re
+import struct
+import subprocess
+import sys
+
+FIREFOX_BROWSERS = {"zen", "firefox", "glide"}
+CHROMIUM_BROWSERS = {"helium", "chrome", "chromium"}
+
+
+def run(cmd):
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+        return r.stdout.strip()
+    except Exception:
+        return ""
+
+
+def get_active_window():
+    raw = run(["hyprctl", "activewindow", "-j"])
+    if not raw:
+        return None
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+
+
+def find_profile_dir(config_path, browser):
+    """Find the active profile directory by most recently modified session file."""
+    if not os.path.isdir(config_path):
+        return None
+
+    best_dir = None
+    best_mtime = 0
+
+    for entry in os.scandir(config_path):
+        if not entry.is_dir():
+            continue
+        # Check for session store files
+        for sf in [
+            os.path.join(entry.path, "zen-sessions.jsonlz4"),
+            os.path.join(entry.path, "sessionstore-backups", "recovery.jsonlz4"),
+            os.path.join(entry.path, "Default", "Sessions"),
+        ]:
+            if os.path.exists(sf):
+                mt = os.path.getmtime(sf)
+                if mt > best_mtime:
+                    best_mtime = mt
+                    best_dir = entry.path
+                break
+
+    return best_dir
+
+
+def decompress_mozlz40(filepath):
+    """Decompress a Mozilla lz40 file (mozLz40 header + lz4 block)."""
+    with open(filepath, "rb") as f:
+        data = f.read()
+    if data[:8] != b"mozLz40\x00":
+        return None
+    uncompressed_size = struct.unpack("<I", data[8:12])[0]
+    try:
+        import lz4.block
+        return lz4.block.decompress(data[12:], uncompressed_size=uncompressed_size)
+    except ImportError:
+        # Fallback: try snappy (some Mozilla builds use snappy)
+        try:
+            import snappy
+            return snappy.decompress(data[8:])
+        except Exception:
+            return None
+
+
+def read_zen_active_tab(profile_dir):
+    """Read the active tab URL from zen-sessions.jsonlz4."""
+    session_file = os.path.join(profile_dir, "zen-sessions.jsonlz4")
+    if not os.path.exists(session_file):
+        # Fallback to recovery.jsonlz4
+        session_file = os.path.join(
+            profile_dir, "sessionstore-backups", "recovery.jsonlz4"
+        )
+    if not os.path.exists(session_file):
+        return None
+
+    raw = decompress_mozlz40(session_file)
+    if not raw:
+        return None
+
+    try:
+        sessions = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+
+    tabs = sessions.get("tabs", [])
+    if not tabs:
+        return None
+
+    # The tab with the highest lastAccessed timestamp is the active one
+    best_tab = max(tabs, key=lambda t: t.get("lastAccessed", 0))
+    entries = best_tab.get("entries", [])
+    idx = best_tab.get("index", 1) - 1  # 1-indexed to 0-indexed
+    if entries and 0 <= idx < len(entries):
+        e = entries[idx]
+        return {"url": e.get("url", ""), "title": e.get("title", "")}
+
+    return None
+
+
+def read_firefox_active_tab(profile_dir):
+    """Read active tab from Firefox/zen session store (recovery.jsonlz4)."""
+    session_file = os.path.join(
+        profile_dir, "sessionstore-backups", "recovery.jsonlz4"
+    )
+    if not os.path.exists(session_file):
+        return None
+
+    raw = decompress_mozlz40(session_file)
+    if not raw:
+        return None
+
+    try:
+        session = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+
+    selected_win = session.get("selectedWindow", 1)
+    for i, win in enumerate(session.get("windows", [])):
+        if i + 1 != selected_win:
+            continue
+        tabs = win.get("tabs", [])
+        active_idx = win.get("index", 1) - 1
+        if 0 <= active_idx < len(tabs):
+            tab = tabs[active_idx]
+            entries = tab.get("entries", [])
+            entry_idx = tab.get("index", 1) - 1
+            if entries and 0 <= entry_idx < len(entries):
+                e = entries[entry_idx]
+                return {"url": e.get("url", ""), "title": e.get("title", "")}
+
+    return None
+
+
+def find_mpris_chromium_pid(browser_class):
+    """Find the MPRIS service for a Chromium-based browser."""
+    output = run(["busctl", "--user", "list"])
+    if not output:
+        return None
+
+    for line in output.splitlines():
+        if "org.mpris.MediaPlayer2.chromium" not in line:
+            continue
+        parts = line.split()
+        if len(parts) < 4:
+            continue
+        name = parts[0]
+        pid = parts[2]
+        # Verify this PID belongs to the right browser
+        try:
+            cmdline_path = f"/proc/{pid}/cmdline"
+            with open(cmdline_path, "rb") as f:
+                cmdline = f.read().decode("utf-8", errors="replace").lower()
+            if browser_class in cmdline:
+                return name
+        except Exception:
+            continue
+    return None
+
+
+def get_mpris_metadata(service_name):
+    """Get metadata from an MPRIS service."""
+    raw = run([
+        "busctl", "--user", "call",
+        service_name, "/org/mpris/MediaPlayer2",
+        "org.freedesktop.DBus.Properties.GetAll",
+        "s", "org.mpris.MediaPlayer2.Player",
+    ])
+    if not raw:
+        return {}
+
+    meta = {}
+    for key in ["xesam:title", "xesam:artist", "PlaybackStatus"]:
+        m = re.search(rf'"{key}" s "([^"]*)"', raw)
+        if m:
+            meta[key] = m.group(1)
+    return meta
+
+
+def search_youtube_url(title):
+    """Search YouTube for a video by title and return the URL."""
+    result = run(["yt-dlp", "--no-download", "--print", "%(webpage_url)s",
+                   f"ytsearch1:{title}"])
+    if result and "youtube.com" in result:
+        return result.strip()
+    return None
+
+
+def is_youtube_url(url):
+    """Check if a URL is a YouTube video page."""
+    return bool(re.match(r"https?://(?:www\.)?(?:youtube\.com/watch|youtu\.be/)", url))
+
+
+def main():
+    win = get_active_window()
+    if not win:
+        print(json.dumps({"error": "no active window"}))
+        sys.exit(1)
+
+    browser_class = win.get("class", "")
+    window_title = win.get("title", "")
+
+    result = {"browser": browser_class, "window_title": window_title}
+
+    if browser_class in FIREFOX_BROWSERS:
+        profile_dir = find_profile_dir(
+            os.path.expanduser(f"~/.config/{browser_class}"), browser_class
+        )
+        if profile_dir:
+            # Try zen-sessions first (Zen-specific, live updated)
+            tab = read_zen_active_tab(profile_dir)
+            if not tab:
+                # Fallback to standard Firefox session store
+                tab = read_firefox_active_tab(profile_dir)
+            if tab:
+                result["url"] = tab["url"]
+                result["title"] = tab["title"]
+
+    elif browser_class in CHROMIUM_BROWSERS:
+        # Use MPRIS to get media title, then search for URL
+        service = find_mpris_chromium_pid(browser_class)
+        if service:
+            meta = get_mpris_metadata(service)
+            title = meta.get("xesam:title", "")
+            if title:
+                result["title"] = title
+                url = search_youtube_url(title)
+                if url:
+                    result["url"] = url
+
+    result["is_youtube"] = is_youtube_url(result.get("url", ""))
+    print(json.dumps(result))
+
+
+if __name__ == "__main__":
+    main()

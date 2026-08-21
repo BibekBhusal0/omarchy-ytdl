@@ -116,7 +116,10 @@ run_with_retry() {
   PYTHONUNBUFFERED=1 yt-dlp "$@" 2>"$ERRL"
   RC=$?
   if needs_cookies "$RC" "$ERRL"; then
-    COOKIES="$(cookies_flag "$COOKIE_BROWSER")"
+    CF="$(mktemp)"
+    cookies_flag "$COOKIE_BROWSER" >"$CF"
+    COOKIES="$(cat "$CF")"
+    rm -f "$CF"
     if [ -n "$COOKIES" ]; then
       # shellcheck disable=SC2086
       PYTHONUNBUFFERED=1 yt-dlp $COOKIES "$@" 2>"$ERRL"
