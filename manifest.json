@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "id": "bibek.ytdl",
-  "name": "yt-dlp",
-  "version": "1.0.4",
+  "name": "Youtube video downloader",
+  "version": "1.0.5",
   "author": "Bibek Bhusal",
   "description": "Download videos and playlists from YouTube and other sites via yt-dlp with up to three parallel downloads, a queue, and a persistent history.",
   "homepage": "https://github.com/BibekBhusal0/omarchy-ytdl",
@@ -13,7 +13,7 @@
     "barWidget": "BarWidget.qml"
   },
   "barWidget": {
-    "displayName": "yt-dlp",
+    "displayName": "Youtube video downloader",
     "description": "Video and playlist downloader with parallel downloads, a queue, and a persistent history.",
     "category": "Media",
     "allowMultiple": false,
@@ -44,7 +44,15 @@
         "key": "cookiesBrowser",
         "type": "enum",
         "label": "Cookies from browser",
-        "options": ["none", "firefox", "chromium", "chrome", "zen", "helium", "glide"],
+        "options": [
+          "none",
+          "firefox",
+          "chromium",
+          "chrome",
+          "zen",
+          "helium",
+          "glide"
+        ],
         "defaultValue": "none",
         "description": "Browser to pull cookies from to bypass YouTube bot detection. Use 'none' if you have no issues."
       },
