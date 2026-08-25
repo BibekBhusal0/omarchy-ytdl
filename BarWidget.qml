@@ -72,19 +72,31 @@ BarWidget {
     text: {
       if (!ytdlService) return "󰏔"
       if (!ytdlService.installed) return "󰏔"
-      if (ytdlService.activeCount > 0) return " (" + ytdlService.activeCount + ")"
+      var total = ytdlService.activeCount + ytdlService.queuedCount
+      if (total > 0) return " (" + total + ")"
       return "󰗃"
     }
     hasVisualContent: text !== ""
     tooltipText: {
       if (!ytdlService || !ytdlService.installed) return "Install yt-dlp"
+      var parts = []
       if (ytdlService.activeCount > 0)
-        return "yt-dlp - " + ytdlService.activeCount + " active download" + (ytdlService.activeCount > 1 ? "s" : "")
+        parts.push(ytdlService.activeCount + " active")
+      if (ytdlService.queuedCount > 0)
+        parts.push(ytdlService.queuedCount + " queued")
+      if (parts.length > 0)
+        return "yt-dlp - " + parts.join(", ")
       return "yt-dlp - No active downloads"
     }
 
     onPressed: function(buttonCode) {
       if (buttonCode === Qt.LeftButton) root.toggle()
+      else if (buttonCode === Qt.RightButton) {
+        if (ytdlService) ytdlService.autoDownload()
+      }
+      else if (buttonCode === Qt.MiddleButton) {
+        if (ytdlService) ytdlService.cancelAll()
+      }
     }
   }
 }

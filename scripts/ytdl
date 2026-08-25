@@ -126,44 +126,89 @@ run_with_retry() {
       RC=$?
     fi
   fi
-  if [ "$RC" -ne 0 ]; then cat "$ERRL"; fi
+  if [ "$RC" -ne 0 ]; then
+    cat "$ERRL"
+  fi
   rm -f "$ERRL"
   return $RC
+}
+
+MERGE_OK=0
+[ "$(printf '2026.08\n%s\n' "$(yt-dlp --version 2>/dev/null)" | sort -V | head -1)" = "2026.08" ] && MERGE_OK=1
+
+# $1 = max height; empty means best. ba fallback covers audio-only uploads.
+pick_fmt() {
+  if [ "$MERGE_OK" = 1 ]; then
+    [ -n "$1" ] && echo "bv[height<=$1]+ba/ba/b" || echo "bv+ba/ba/b"
+  else
+    [ -n "$1" ] && echo "b[height<=$1]/b" || echo "b"
+  fi
 }
 
 case "$CMD" in
   download)
     URL="$1"
     QUALITY="$2"
-    OUTPUT="$3"
-    COOKIE_BROWSER="$4"
-    EXTRA="$5"
+    DOWNLOAD_TYPE="$3"
+    SUB_LANGS="$4"
+    OUTPUT="$5"
+    COOKIE_BROWSER="$6"
+    shift 6
+    EXTRA="$7"
 
-    # yt-dlp >= 2026.08 lists YouTube's HLS streams as video-only, so the
-    # pre-merged "b" selector degrades to 360p (or errors outright on
-    # multi-language videos) and merging via ffmpeg is required for real
-    # quality. Older releases hit HTTP 403 on merged downloads (PO-token
-    # bug, fixed upstream), so they keep the combined-only selectors.
-    MERGE_OK=0
-    [ "$(printf '2026.08\n%s\n' "$(yt-dlp --version 2>/dev/null)" | sort -V | head -1)" = "2026.08" ] && MERGE_OK=1
-
-    # $1 = max height; empty means best. ba fallback covers audio-only uploads.
-    pick_fmt() {
-      if [ "$MERGE_OK" = 1 ]; then
-        [ -n "$1" ] && echo "bv[height<=$1]+ba/ba/b" || echo "bv+ba/ba/b"
-      else
-        [ -n "$1" ] && echo "b[height<=$1]/b" || echo "b"
-      fi
-    }
-
-    # Extra args are trusted from the user config; word-split on purpose.
+    # Format selection uses pre-merged formats to avoid FFmpeg merge issues.
+    # Format strings use b[height<=X]/b which selects best pre-merged format
+    # with the specified height limit, falling back to best available.
+    # Extra args are trusted from user config; word-split on purpose.
     # shellcheck disable=SC2086
-    case "$QUALITY" in
-      1080p) run_with_retry --no-playlist --newline $EXTRA -f "$(pick_fmt 1080)" -o "$OUTPUT" "$URL" ;;
-      720p) run_with_retry --no-playlist --newline $EXTRA -f "$(pick_fmt 720)" -o "$OUTPUT" "$URL" ;;
-      480p) run_with_retry --no-playlist --newline $EXTRA -f "$(pick_fmt 480)" -o "$OUTPUT" "$URL" ;;
-      audio) run_with_retry --no-playlist --newline $EXTRA -f "ba/b" -o "$OUTPUT" "$URL" ;;
-      *) run_with_retry --no-playlist --newline $EXTRA -f "$(pick_fmt "")" -o "$OUTPUT" "$URL" ;;
+    case "$DOWNLOAD_TYPE" in
+      video)
+        case "$QUALITY" in
+          1080p) run_with_retry --no-playlist --newline $EXTRA -f "$(pick_fmt 1080)" -o "$OUTPUT" "$URL" ;;
+          720p) run_with_retry --no-playlist --newline $EXTRA -f "$(pick_fmt 720)" -o "$OUTPUT" "$URL" ;;
+          480p) run_with_retry --no-playlist --newline $EXTRA -f "$(pick_fmt 480)" -o "$OUTPUT" "$URL" ;;
+          *) run_with_retry --no-playlist --newline $EXTRA -f "$(pick_fmt "")" -o "$OUTPUT" "$URL" ;;
+        esac
+        ;;
+      audio)
+        run_with_retry --no-playlist --newline $EXTRA -x -o "$OUTPUT" "$URL"
+        ;;
+      both)
+        case "$QUALITY" in
+          1080p) run_with_retry --no-playlist --newline $EXTRA -f "$(pick_fmt 1080)" -o "$OUTPUT" "$URL" ;;
+          720p) run_with_retry --no-playlist --newline $EXTRA -f "$(pick_fmt 720)" -o "$OUTPUT" "$URL" ;;
+          480p) run_with_retry --no-playlist --newline $EXTRA -f "$(pick_fmt 480)" -o "$OUTPUT" "$URL" ;;
+          *) run_with_retry --no-playlist --newline $EXTRA -f "$(pick_fmt "")" -o "$OUTPUT" "$URL" ;;
+        esac
+        AUDIO_OUTPUT="${OUTPUT%.*}_audio.m4a"
+        run_with_retry --no-playlist --newline $EXTRA -x --audio-format m4a -o "$AUDIO_OUTPUT" "$URL"
+        ;;
+      subs)
+        # Transcript-only run for its own panel item; writes no media. Each
+        # written subtitle file is relayed as a SUBFILE line so the service can
+        # tell "completed transcript" apart from "video has no subtitles".
+        T_ARGS="--write-subs --write-auto-subs"
+        if [ -n "$SUB_LANGS" ] && [ "$SUB_LANGS" != "all" ]; then
+          T_ARGS="$T_ARGS --sub-langs $SUB_LANGS"
+        fi
+        SUBL="$(mktemp)"
+        # shellcheck disable=SC2086
+        run_with_retry --no-playlist --newline $EXTRA $T_ARGS --skip-download -o "$OUTPUT" "$URL" >"$SUBL"
+        while IFS= read -r ln; do
+          case "$ln" in
+            *"Writing video subtitles to: "*)
+              p="${ln#*Writing video subtitles to: }"
+              p="$(printf '%s' "$p" | tr -d '\r')"
+              # yt-dlp logs the .part name before the file is finalized.
+              case "$p" in
+                *.part) [ -f "${p%.part}" ] && p="${p%.part}" ;;
+              esac
+              [ -f "$p" ] && { echo "SUBFILE $p"; }
+              ;;
+          esac
+        done <"$SUBL"
+        rm -f "$SUBL"
+        ;;
     esac
     ;;
     
@@ -179,11 +224,11 @@ case "$CMD" in
     URL="$1"
     COOKIE_BROWSER="$2"
     EXTRA="$3"
-    # Flat-resolve the playlist to id/title/url so the service can queue each
+    # Flat-resolve the playlist to id/title/url/playlistTitle so the service can queue each
     # video as its own sequential download.
     # shellcheck disable=SC2086
-    run_with_retry --flat-playlist --print "$(printf '%s\t%s\t%s' '%(id)s' '%(title)s' '%(url)s')" $EXTRA "$URL" |
-      jq -R 'split("\t") | select(length == 3) | {id: .[0], title: .[1], url: .[2]}' |
+    run_with_retry --flat-playlist --print "$(printf '%s\t%s\t%s\t%s' '%(id)s' '%(title)s' '%(url)s' '%(playlist_title)s')" $EXTRA "$URL" |
+      jq -R 'split("\t") | select(length == 4) | {id: .[0], title: .[1], url: .[2], playlistTitle: .[3]}' |
       jq -sc .
     ;;
 

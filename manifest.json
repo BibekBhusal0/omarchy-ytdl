@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "bibek.ytdl",
   "name": "Youtube video downloader",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "author": "Bibek Bhusal",
   "description": "Download videos and playlists from YouTube and other sites via yt-dlp with up to three parallel downloads, a queue, and a persistent history.",
   "homepage": "https://github.com/BibekBhusal0/omarchy-ytdl",
@@ -21,9 +21,13 @@
     "defaults": {
       "downloadLocation": "~/Downloads/yt-dlp",
       "defaultQuality": "1080p",
+      "defaultDownloadType": "video",
       "cookiesBrowser": "none",
       "extraArgs": "",
-      "enableHistory": true
+      "enableHistory": true,
+      "downloadTranscripts": false,
+      "transcriptLanguages": "en",
+      "playlistInSeparateFolder": true
     },
     "schema": [
       {
@@ -38,7 +42,36 @@
         "label": "Default quality",
         "options": ["best", "1080p", "720p", "480p"],
         "defaultValue": "1080p",
-        "description": "Default download format."
+        "description": "Default download quality for video."
+      },
+      {
+        "key": "defaultDownloadType",
+        "type": "enum",
+        "label": "Default download type",
+        "options": ["video", "audio", "both"],
+        "defaultValue": "video",
+        "description": "What to download by default: video only, audio only, or both."
+      },
+      {
+        "key": "downloadTranscripts",
+        "type": "boolean",
+        "label": "Download transcripts",
+        "description": "Automatically download subtitles/transcripts with videos.",
+        "defaultValue": false
+      },
+      {
+        "key": "transcriptLanguages",
+        "type": "string",
+        "label": "Transcript languages",
+        "description": "Comma-separated language codes for transcripts (e.g., 'en,es,fr'). Use 'all' for all available.",
+        "defaultValue": "en"
+      },
+      {
+        "key": "playlistInSeparateFolder",
+        "type": "boolean",
+        "label": "Playlist in separate folder",
+        "description": "Download playlists into their own subfolder named after the playlist.",
+        "defaultValue": true
       },
       {
         "key": "cookiesBrowser",

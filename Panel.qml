@@ -22,7 +22,8 @@ Panel {
 
   property string inputUrl: ""
   property string clipboardUrl: ""
-  property string selectedQuality: ytdlService ? ytdlService.selectedQuality : "1080p"
+
+  property bool settingsPanelVisible: false
 
   // Keyboard cursor model: focusSection × selectedIndex.
   property string focusSection: "input"
@@ -42,6 +43,40 @@ Panel {
   readonly property var historyItems: ytdlService ? ytdlService.history : []
   readonly property bool playlistSectionVisible: ytdlService && ytdlService.playlistInfoUrl !== ""
   readonly property bool detectedSectionVisible: ytdlService && ytdlService.detectedUrl !== ""
+  readonly property bool hasRetryableItems: {
+    for (var i = 0; i < root.historyItems.length; i++) {
+      if (root.historyItems[i].status === "error" || root.historyItems[i].status === "cancelled") return true
+    }
+    return false
+  }
+
+  // Shown on the settings button instead of a bare gear icon so the current
+  // quality/format choice is visible at a glance.
+  readonly property string selectionSummary: {
+    if (!ytdlService) return ""
+    var t = ytdlService.defaultDownloadType
+    var q = ytdlService.selectedQuality
+    if (t === "audio") return "Audio"
+    if (t === "both") return q + " · Audio"
+    return q
+  }
+
+  property bool _serviceWired: false
+
+  // The bar widget injects ytdlService after both components load, so IPC
+  // requests reach the panel through these service signals.
+  function wireService() {
+    if (root._serviceWired || !ytdlService) return
+    root._serviceWired = true
+    ytdlService.openPanelRequested.connect(function() {
+      if (!root.opened) root.open()
+    })
+    ytdlService.openSettingsRequested.connect(function(openIt) {
+      if (!root.opened) root.open()
+      if (openIt && !root.settingsPanelVisible) root.openSettings()
+      else if (!openIt && root.settingsPanelVisible) root.closeSettings()
+    })
+  }
 
   onInputUrlChanged: {
     if (inputUrl && urlInput.text !== inputUrl)
@@ -49,14 +84,16 @@ Panel {
   }
 
   onOpenedChanged: {
-    if (root.opened && ytdlService)
-      ytdlService.pruneMissing()
+    if (root.opened) {
+      root.settingsPanelVisible = false;
+      if (ytdlService) ytdlService.pruneMissing();
+    }
   }
 
   function filterActive(list) {
     var r = []
     for (var i = 0; i < list.length; i++)
-      if (list[i].status === "downloading" || list[i].status === "merging")
+      if (list[i].status === "downloading")
         r.push(list[i])
     return r
   }
@@ -73,6 +110,7 @@ Panel {
     root.focusSection = "input"
     root.selectedIndex = 0
     root.cursorActive = false
+    root.settingsPanelVisible = false
     controller.show()
     if (ytdlService) {
       ytdlService.checkInstallation()
@@ -87,6 +125,7 @@ Panel {
     controller.hide()
   }
 
+  // Handle panel toggle: when the widget on the bar is clicked, it opens/closes.
   function toggle() {
     if (opened) close()
     else open()
@@ -101,7 +140,6 @@ Panel {
   function pasteClipboard() {
     if (!ytdlService) return
     ytdlService.checkClipboard(function(url) {
-      // Don't re-offer a link that is already downloading or queued.
       if (!url || ytdlService.isUrlBusy(url)) {
         root.clipboardUrl = ""
         return
@@ -114,34 +152,43 @@ Panel {
 
   function submitUrl() {
     if (!ytdlService || !inputUrl) return
-    ytdlService.startDownload(inputUrl, selectedQuality)
+    ytdlService.startDownload(inputUrl, ytdlService.selectedQuality, false, "", ytdlService.defaultDownloadType)
     inputUrl = ""
     urlInput.text = ""
   }
 
-  function cycleQuality() {
-    if (!ytdlService) return
-    var q = ["best", "1080p", "720p", "480p"]
-    var i = q.indexOf(root.selectedQuality)
-    var next = q[(i + 1) % q.length]
-    ytdlService.selectedQuality = next
-    ytdlService.persistQuality()
-    ytdlService.setDefaultQuality(next)
+  function openSettings() {
+    root.settingsPanelVisible = true
+    root.focusSection = "settings"
+    root.selectedIndex = 0
+    root.cursorActive = true
+  }
+
+  function closeSettings() {
+    root.settingsPanelVisible = false
+    root.focusSection = "input"
+    root.selectedIndex = 1
+    root.cursorActive = true
   }
 
   function focusUrlField() {
+    if (root.settingsPanelVisible) return
     root.focusSection = "input"
     root.selectedIndex = 0
     root.cursorActive = true
     if (urlInput) urlInput.forceActiveFocus()
   }
 
+  // Returns focus from text field to the main key catcher.
   function focusPanel() {
     keyCatcher.forceActiveFocus()
     if (urlInput) urlInput.focus = false
   }
 
   function sectionList() {
+    if (root.settingsPanelVisible) {
+      return ["settings"]
+    }
     var s = []
     if (!root.installed && !(ytdlService && ytdlService.checkingInstallation)) s.push("install")
     if (root.installed) s.push("input")
@@ -154,6 +201,9 @@ Panel {
   }
 
   function sectionCount(name) {
+    if (name === "settings") {
+      return settingsPanelLoader.item ? settingsPanelLoader.item.visibleItems.length : 0
+    }
     if (name === "install") return 1
     if (name === "input") return 3
     if (name === "detected") return 1
@@ -171,6 +221,7 @@ Panel {
   }
 
   function focusSectionAt(name, index) {
+    if (root.settingsPanelVisible && name !== "settings") return
     root.focusSection = name
     root.selectedIndex = index
     root.cursorActive = true
@@ -213,20 +264,24 @@ Panel {
       return
     }
     var s = root.focusSection
-    if (s === "install") {
+    if (s === "settings") {
+      if (settingsPanelLoader.item) {
+        settingsPanelLoader.item.activateIndex(root.selectedIndex)
+      }
+    } else if (s === "install") {
       if (ytdlService && !ytdlService.installing) ytdlService.installInTerminal()
     } else if (s === "input") {
       if (root.selectedIndex === 0) root.focusUrlField()
-      else if (root.selectedIndex === 1) root.cycleQuality()
+      else if (root.selectedIndex === 1) root.openSettings()
       else root.submitUrl()
     } else if (s === "detected") {
       if (ytdlService && ytdlService.detectedUrl) {
-        ytdlService.startDownload(ytdlService.detectedUrl, root.selectedQuality)
+        ytdlService.startDownload(ytdlService.detectedUrl, ytdlService.selectedQuality, false, ytdlService.detectedTitle || "", ytdlService.defaultDownloadType)
         ytdlService.clearDetection()
       }
     } else if (s === "playlist") {
       if (ytdlService && ytdlService.playlistInfoUrl) {
-        ytdlService.startPlaylist(ytdlService.playlistInfoUrl, root.selectedQuality)
+        ytdlService.startPlaylist(ytdlService.playlistInfoUrl, ytdlService.selectedQuality, ytdlService.defaultDownloadType)
         ytdlService.clearPlaylistInfo()
       }
     } else if (s === "downloads") {
@@ -245,7 +300,8 @@ Panel {
       }
     } else if (s === "history") {
       if (root.selectedIndex === 0) {
-        if (ytdlService) ytdlService.clearHistory()
+        if (root.hasRetryableItems && ytdlService) ytdlService.retryAll()
+        else if (ytdlService) ytdlService.clearHistory()
       } else {
         var h = root.historyItems[root.selectedIndex - 1]
         if (h && ytdlService) {
@@ -258,7 +314,9 @@ Panel {
 
   function deleteCursor() {
     if (!root.cursorActive) return
-    if (root.focusSection === "detected") {
+    if (root.focusSection === "settings") {
+      root.closeSettings()
+    } else if (root.focusSection === "detected") {
       if (ytdlService) ytdlService.clearDetection()
     } else if (root.focusSection === "playlist") {
       if (ytdlService) ytdlService.clearPlaylistInfo()
@@ -287,16 +345,28 @@ Panel {
   }
 
   function handleTextKey(t) {
-    if (t === "/") root.focusUrlField()
-    else if (t === "q" || t === "Q") root.cycleQuality()
+    if (root.settingsPanelVisible) {
+      if (t === "q" || t === "Q" || t === "Escape") {
+        root.closeSettings()
+      }
+    } else {
+      if (t === "/") root.focusUrlField()
+      else if (t === "s" || t === "S") root.openSettings()
+    }
   }
 
   function scrollToCursor() {
+    if (root.settingsPanelVisible) {
+      if (settingsPanelLoader.item) {
+        settingsPanelLoader.item.scrollToCursor()
+      }
+      return
+    }
     if (!flick) return
     var item = null
     if (root.focusSection === "input") {
       if (root.selectedIndex === 0 && urlInput) item = urlInput
-      else if (root.selectedIndex === 1 && qualitySelector) item = qualitySelector
+      else if (root.selectedIndex === 1 && settingsBtn) item = settingsBtn
       else if (root.selectedIndex === 2 && downloadManualBtn) item = downloadManualBtn
     } else if (root.focusSection === "detected")
       item = flick.contentItem.parent.detectedColumn
@@ -357,8 +427,11 @@ Panel {
   }
 
   Component.onCompleted: {
+    root.wireService()
     if (ytdlService) ytdlService.checkInstallation()
   }
+
+  onYtdlServiceChanged: Qt.callLater(root.wireService)
 
   // Debounces the playlist-info lookup while the user types or edits the URL.
   Timer {
@@ -378,21 +451,34 @@ Panel {
     open: root.opened
     focusTarget: keyCatcher
     contentWidth: panel.fittedContentWidth(Style.space(420))
-    contentHeight: panel.fittedContentHeight(flick.contentHeight, Style.space(500))
+    // SettingsPanel is a Flickable with no implicitHeight, so the card sizes
+    // from its exposed preferredHeight when the settings page is showing.
+    contentHeight: panel.fittedContentHeight(
+      root.settingsPanelVisible && settingsPanelLoader.item
+        ? settingsPanelLoader.item.preferredHeight
+        : flick.contentHeight,
+      root.settingsPanelVisible ? Style.space(560) : Style.space(500))
 
     PanelKeyCatcher {
       id: keyCatcher
       anchors.fill: parent
-      // Let the URL field own all keys while it is focused.
+      // Let the URL field, a settings dropdown popup, or the languages input
+      // own all keys while they are focused.
       blocked: urlInput.activeFocus
+        || (settingsPanelLoader.active && settingsPanelLoader.item
+            && (settingsPanelLoader.item.isPopupOpen || settingsPanelLoader.item.isInputActive))
 
       onMoveRequested: function(dx, dy) { root.moveCursor(dx, dy) }
       onActivateRequested: root.activateCursor()
-      onCloseRequested: root.close()
+      onCloseRequested: {
+        if (root.settingsPanelVisible) root.closeSettings()
+        else root.close()
+      }
       onDeleteRequested: root.deleteCursor()
       onTabRequested: function(direction) { root.switchPanel(direction) }
       onTextKey: function(t) { root.handleTextKey(t) }
 
+      // Main Download view
       Flickable {
         id: flick
         anchors.fill: parent
@@ -400,6 +486,7 @@ Panel {
         contentWidth: width
         contentHeight: content.implicitHeight
         boundsBehavior: Flickable.StopAtBounds
+        visible: !root.settingsPanelVisible
 
         Column {
           id: content
@@ -508,38 +595,20 @@ Panel {
                 Keys.onEscapePressed: root.focusPanel()
               }
 
-              CursorSurface {
-                id: qualitySelector
-                implicitWidth: Style.space(64)
-                implicitHeight: Style.space(36)
+              Button {
+                id: settingsBtn
+                text: root.selectionSummary
+                tooltipText: "Download settings"
+                fontSize: Style.font.caption
                 foreground: root.foreground
                 accent: root.activeColor
+                bordered: true
+                implicitHeight: Style.space(36)
                 hasCursor: root.cursorActive && root.focusSection === "input" && root.selectedIndex === 1
-
-                property var qualities: ["best", "1080p", "720p", "480p"]
-
-                Text {
-                  anchors.centerIn: parent
-                  text: qualitySelector.qualities[qualitySelector.qualities.indexOf(root.selectedQuality)] || "best"
-                  color: root.foreground
-                  font.family: root.fontFamily
-                  font.pixelSize: Style.font.caption
-                  font.bold: true
+                onHovered: function(hovered) {
+                  if (hovered) root.focusSectionAt("input", 1)
                 }
-
-                MouseArea {
-                  id: qualityMouse
-                  anchors.fill: parent
-                  hoverEnabled: true
-                  onContainsMouseChanged: if (containsMouse) root.focusSectionAt("input", 1)
-                  onClicked: root.cycleQuality()
-                }
-
-                PanelToolTip {
-                  visible: qualityMouse.containsMouse
-                  text: "Quality: " + (qualitySelector.qualities[qualitySelector.qualities.indexOf(root.selectedQuality)] || "best")
-                  fontFamily: root.fontFamily
-                }
+                onClicked: root.openSettings()
               }
 
               Button {
@@ -629,7 +698,7 @@ Panel {
                 hasCursor: root.cursorActive && root.focusSection === "detected"
                 onClicked: {
                   if (ytdlService && ytdlService.detectedUrl) {
-                    ytdlService.startDownload(ytdlService.detectedUrl, root.selectedQuality)
+                    ytdlService.startDownload(ytdlService.detectedUrl, ytdlService.selectedQuality, false, ytdlService.detectedTitle || "", ytdlService.defaultDownloadType)
                     ytdlService.clearDetection()
                   }
                 }
@@ -700,7 +769,7 @@ Panel {
                 hasCursor: root.cursorActive && root.focusSection === "playlist"
                 onClicked: {
                   if (ytdlService && ytdlService.playlistInfoUrl) {
-                    ytdlService.startPlaylist(ytdlService.playlistInfoUrl, root.selectedQuality)
+                    ytdlService.startPlaylist(ytdlService.playlistInfoUrl, ytdlService.selectedQuality, ytdlService.defaultDownloadType)
                     ytdlService.clearPlaylistInfo()
                     root.clipboardUrl = ""
                     root.inputUrl = ""
@@ -789,7 +858,7 @@ Panel {
 
                     Text {
                       Layout.fillWidth: true
-                      text: modelData.title || "Fetching title\u2026"
+                      text: modelData.displayTitle || modelData.title || "Fetching title\u2026"
                       color: root.foreground
                       font.family: root.fontFamily
                       font.pixelSize: Style.font.bodySmall
@@ -814,7 +883,7 @@ Panel {
 
                   Rectangle {
                     width: parent.width
-                    height: Style.space(4)
+                    height: Style.space(5)
                     radius: height / 2
                     color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.1)
 
@@ -828,24 +897,21 @@ Panel {
                     }
                   }
 
-                  Item {
+                  RowLayout {
                     width: parent.width
-                    implicitHeight: Math.max(speedText.implicitHeight, etaText.implicitHeight)
+                    spacing: Style.space(8)
 
                     Text {
-                      id: speedText
-                      anchors.left: parent.left
-                      text: modelData.status === "merging"
-                        ? "Merging formats\u2026"
-                        : (modelData.speed || "Waiting\u2026")
+                      Layout.fillWidth: true
+                      text: modelData.speed || "Waiting\u2026"
                       color: Qt.darker(root.foreground, 1.4)
                       font.family: root.fontFamily
                       font.pixelSize: Style.font.caption
+                      elide: Text.ElideRight
+                      maximumLineCount: 1
                     }
 
                     Text {
-                      id: etaText
-                      anchors.right: parent.right
                       text: modelData.eta ? "Time remaining " + modelData.eta : ""
                       color: Qt.darker(root.foreground, 1.4)
                       font.family: root.fontFamily
@@ -937,7 +1003,7 @@ Panel {
 
                     Text {
                       width: parent.width
-                      text: modelData.title || "Unknown"
+                      text: modelData.displayTitle || modelData.title || "Unknown"
                       color: root.foreground
                       font.family: root.fontFamily
                       font.pixelSize: Style.font.bodySmall
@@ -1000,6 +1066,20 @@ Panel {
               }
 
               PanelActionButton {
+                visible: root.hasRetryableItems
+                iconText: ""
+                tooltipText: "Retry all failed/cancelled"
+                foreground: root.foreground
+                hoverColor: root.activeColor
+                fontFamily: root.fontFamily
+                fontSize: Style.font.bodySmall
+                hasCursor: root.cursorActive && root.focusSection === "history" && root.selectedIndex === 0 && root.hasRetryableItems
+                onClicked: {
+                  if (ytdlService) ytdlService.retryAll()
+                }
+              }
+
+              PanelActionButton {
                 iconText: ""
                 tooltipText: "Clear history"
                 foreground: root.foreground
@@ -1040,7 +1120,7 @@ Panel {
 
                   onClicked: {
                     root.focusSectionAt("history", index)
-                    if (modelData.status === "done") {
+                    if (modelData.status === "done" && modelData._downloadType !== "transcript") {
                       if (ytdlService) ytdlService.playFile(modelData.filepath)
                     } else if (modelData.status === "error" || modelData.status === "cancelled") {
                       if (ytdlService) ytdlService.retryDownload(modelData)
@@ -1059,6 +1139,7 @@ Panel {
                     text: modelData.status === "done" ? ""
                       : modelData.status === "error" ? ""
                       : modelData.status === "cancelled" ? "󰜺"
+                      : modelData.status === "unavailable" ? ""
                       : ""
                     color: modelData.status === "done" ? "#4ade80"
                       : modelData.status === "error" ? Color.urgent
@@ -1074,7 +1155,7 @@ Panel {
 
                     Text {
                       width: parent.width
-                      text: modelData.title || "Unknown"
+                      text: modelData.displayTitle || modelData.title || "Unknown"
                       color: root.foreground
                       font.family: root.fontFamily
                       font.pixelSize: Style.font.bodySmall
@@ -1087,6 +1168,7 @@ Panel {
                       width: parent.width
                       text: {
                         if (modelData.status === "done") return "Completed"
+                        if (modelData.status === "unavailable") return "Subtitles not available"
                         if (modelData.status === "error") return modelData.error || "Download failed"
                         if (modelData.status === "cancelled") return "Cancelled"
                         return modelData.status
@@ -1177,6 +1259,26 @@ Panel {
               wrapMode: Text.WordWrap
             }
           }
+        }
+      }
+
+      // Settings Panel loaded overlay
+      Loader {
+        id: settingsPanelLoader
+        anchors.fill: parent
+        active: root.settingsPanelVisible
+        visible: root.settingsPanelVisible
+        source: "SettingsPanel.qml"
+        onLoaded: {
+          item.ytdlService = root.ytdlService
+          item.foreground = root.foreground
+          item.activeColor = root.activeColor
+          item.fontFamily = root.fontFamily
+          item.cursorActive = Qt.binding(function() { return root.cursorActive && root.focusSection === "settings" })
+          item.selectedIndex = Qt.binding(function() { return root.selectedIndex })
+          item.closeRequested.connect(root.closeSettings)
+          item.inputClosed.connect(root.focusPanel)
+          item.cursorMoveRequested.connect(function(i) { root.focusSectionAt("settings", i) })
         }
       }
     }
