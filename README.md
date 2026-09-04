@@ -2,8 +2,6 @@
 
 A YouTube video downloader for the Omarchy bar.
 
-https://github.com/user-attachments/assets/8a63333c-689c-4793-9ed7-804d2df5b888
-
 ![Youtube Video Downloader preview](preview.png)
 
 ## Features
@@ -30,6 +28,10 @@ https://github.com/user-attachments/assets/8a63333c-689c-4793-9ed7-804d2df5b888
 ```bash
 omarchy plugin add https://github.com/BibekBhusal0/omarchy-ytdl.git --enable
 ```
+
+## Demo
+
+https://github.com/user-attachments/assets/8a63333c-689c-4793-9ed7-804d2df5b888
 
 ## Usage
 
