@@ -1,19 +1,22 @@
 {
   "schemaVersion": 1,
   "id": "bibek.ytdl",
-  "name": "Youtube video downloader",
-  "version": "1.0.6",
+  "name": "Youtube Video Downloader",
+  "version": "1.0.7",
   "author": "Bibek Bhusal",
   "description": "Download videos and playlists from YouTube and other sites via yt-dlp with up to three parallel downloads, a queue, and a persistent history.",
   "homepage": "https://github.com/BibekBhusal0/omarchy-ytdl",
-  "kinds": ["service", "bar-widget"],
+  "kinds": [
+    "service",
+    "bar-widget"
+  ],
   "keepLoaded": true,
   "entryPoints": {
     "service": "Service.qml",
     "barWidget": "BarWidget.qml"
   },
   "barWidget": {
-    "displayName": "Youtube video downloader",
+    "displayName": "Youtube Video Downloader",
     "description": "Video and playlist downloader with parallel downloads, a queue, and a persistent history.",
     "category": "Media",
     "allowMultiple": false,
@@ -40,7 +43,12 @@
         "key": "defaultQuality",
         "type": "enum",
         "label": "Default quality",
-        "options": ["best", "1080p", "720p", "480p"],
+        "options": [
+          "best",
+          "1080p",
+          "720p",
+          "480p"
+        ],
         "defaultValue": "1080p",
         "description": "Default download quality for video."
       },
@@ -48,7 +56,11 @@
         "key": "defaultDownloadType",
         "type": "enum",
         "label": "Default download type",
-        "options": ["video", "audio", "both"],
+        "options": [
+          "video",
+          "audio",
+          "both"
+        ],
         "defaultValue": "video",
         "description": "What to download by default: video only, audio only, or both."
       },

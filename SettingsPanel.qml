@@ -22,8 +22,8 @@ Flickable {
   property bool cursorActive: false
   property int selectedIndex: 0
 
-  signal closeRequested()
-  signal inputClosed()
+  signal closeRequested
+  signal inputClosed
   signal cursorMoveRequested(int index)
 
   // The panel card sizes itself from this; Flickable reports no
@@ -43,8 +43,9 @@ Flickable {
   // Mouse hover on any control moves the shared cursor so keyboard and
   // pointer highlight stay in sync (the parent owns selectedIndex).
   function hoverKey(itemKey) {
-    var i = visibleItems.indexOf(itemKey)
-    if (i >= 0) cursorMoveRequested(i)
+    var i = visibleItems.indexOf(itemKey);
+    if (i >= 0)
+      cursorMoveRequested(i);
   }
 
   // Return the ordered list of visible settings controls for keyboard cursor indexing.
@@ -68,7 +69,8 @@ Flickable {
   }
 
   function activateIndex(idx) {
-    if (idx < 0 || idx >= visibleItems.length) return;
+    if (idx < 0 || idx >= visibleItems.length)
+      return;
     var itemKey = visibleItems[idx];
     if (itemKey === "type") {
       typeDropdown.toggle();
@@ -92,18 +94,26 @@ Flickable {
   }
 
   function scrollToCursor() {
-    if (!root.cursorActive || selectedIndex < 0 || selectedIndex >= visibleItems.length) return;
+    if (!root.cursorActive || selectedIndex < 0 || selectedIndex >= visibleItems.length)
+      return;
     var itemKey = visibleItems[selectedIndex];
     var item = null;
-    if (itemKey === "type") item = typeDropdown;
-    else if (itemKey === "quality") item = qualityDropdown;
-    else if (itemKey === "downloadPath") item = downloadPathInput;
-    else if (itemKey === "transcripts") item = transcriptsToggle;
-    else if (itemKey === "languages") item = langInput;
-    else if (itemKey === "playlistFolder") item = playlistFolderToggle;
-    else if (itemKey === "back") item = backBtn;
-
-    if (!item) return;
+    if (itemKey === "type")
+      item = typeDropdown;
+    else if (itemKey === "quality")
+      item = qualityDropdown;
+    else if (itemKey === "downloadPath")
+      item = downloadPathInput;
+    else if (itemKey === "transcripts")
+      item = transcriptsToggle;
+    else if (itemKey === "languages")
+      item = langInput;
+    else if (itemKey === "playlistFolder")
+      item = playlistFolderToggle;
+    else if (itemKey === "back")
+      item = backBtn;
+    if (!item)
+      return;
     var y = item.mapToItem(contentColumn, 0, 0).y;
     if (y < root.contentY) {
       root.contentY = Math.max(0, y - Style.space(8));
@@ -138,17 +148,24 @@ Flickable {
       width: parent.width
       label: "Download Type"
       value: ytdlService ? ytdlService.defaultDownloadType : "video"
-      options: [
-        { value: "video", label: "Video" },
-        { value: "audio", label: "Audio" },
-        { value: "both", label: "Video & Audio" }
-      ]
+      options: [{
+          "value": "video",
+          "label": "Video"
+        }, {
+          "value": "audio",
+          "label": "Audio"
+        }, {
+          "value": "both",
+          "label": "Video & Audio"
+        }]
       hasCursor: root.cursorActive && root.visibleItems[root.selectedIndex] === "type"
-      onHovered: function(isHovered) {
-        if (isHovered) root.hoverKey("type")
+      onHovered: function (isHovered) {
+        if (isHovered)
+          root.hoverKey("type");
       }
-      onChanged: function(val) {
-        if (ytdlService) ytdlService.updateSetting("defaultDownloadType", val);
+      onChanged: function (val) {
+        if (ytdlService)
+          ytdlService.updateSetting("defaultDownloadType", val);
       }
     }
 
@@ -158,19 +175,28 @@ Flickable {
       width: parent.width
       label: "Video Quality"
       value: ytdlService ? ytdlService.selectedQuality : "1080p"
-      options: [
-        { value: "best", label: "Best available" },
-        { value: "1080p", label: "1080p" },
-        { value: "720p", label: "720p" },
-        { value: "480p", label: "480p" }
-      ]
+      options: [{
+          "value": "best",
+          "label": "Best available"
+        }, {
+          "value": "1080p",
+          "label": "1080p"
+        }, {
+          "value": "720p",
+          "label": "720p"
+        }, {
+          "value": "480p",
+          "label": "480p"
+        }]
       visible: ytdlService && ytdlService.defaultDownloadType !== "audio"
       hasCursor: root.cursorActive && root.visibleItems[root.selectedIndex] === "quality"
-      onHovered: function(isHovered) {
-        if (isHovered) root.hoverKey("quality")
+      onHovered: function (isHovered) {
+        if (isHovered)
+          root.hoverKey("quality");
       }
-      onChanged: function(val) {
-        if (ytdlService) ytdlService.updateSetting("selectedQuality", val);
+      onChanged: function (val) {
+        if (ytdlService)
+          ytdlService.updateSetting("selectedQuality", val);
       }
     }
 
@@ -194,9 +220,11 @@ Flickable {
         text: ytdlService ? ytdlService.downloadLocation : "~/Downloads/yt-dlp"
         placeholderText: "~/Downloads/yt-dlp"
         hasCursor: root.cursorActive && root.visibleItems[root.selectedIndex] === "downloadPath"
-        onHoveredChanged: if (hovered) root.hoverKey("downloadPath")
+        onHoveredChanged: if (hovered)
+          root.hoverKey("downloadPath")
         onAccepted: {
-          if (ytdlService && text.trim()) ytdlService.updateSetting("downloadLocation", text.trim());
+          if (ytdlService && text.trim())
+            ytdlService.updateSetting("downloadLocation", text.trim());
           downloadPathInput.focus = false;
           root.inputClosed();
         }
@@ -215,8 +243,9 @@ Flickable {
       description: "Download subtitles/transcripts automatically."
       checked: ytdlService ? ytdlService.downloadTranscripts : false
       hasCursor: root.cursorActive && root.visibleItems[root.selectedIndex] === "transcripts"
-      onHovered: function(isHovered) {
-        if (isHovered) root.hoverKey("transcripts")
+      onHovered: function (isHovered) {
+        if (isHovered)
+          root.hoverKey("transcripts");
       }
       onClicked: {
         if (ytdlService) {
@@ -246,9 +275,11 @@ Flickable {
         text: ytdlService ? ytdlService.transcriptLanguages : "en"
         placeholderText: "Comma-separated codes (e.g., en,es,fr) or 'all'"
         hasCursor: root.cursorActive && root.visibleItems[root.selectedIndex] === "languages"
-        onHoveredChanged: if (hovered) root.hoverKey("languages")
+        onHoveredChanged: if (hovered)
+          root.hoverKey("languages")
         onAccepted: {
-          if (ytdlService) ytdlService.updateSetting("transcriptLanguages", text);
+          if (ytdlService)
+            ytdlService.updateSetting("transcriptLanguages", text);
           langInput.focus = false;
           root.inputClosed();
         }
@@ -267,8 +298,9 @@ Flickable {
       description: "Organize playlist items into a folder named after the playlist."
       checked: ytdlService ? ytdlService.playlistInSeparateFolder : true
       hasCursor: root.cursorActive && root.visibleItems[root.selectedIndex] === "playlistFolder"
-      onHovered: function(isHovered) {
-        if (isHovered) root.hoverKey("playlistFolder")
+      onHovered: function (isHovered) {
+        if (isHovered)
+          root.hoverKey("playlistFolder");
       }
       onClicked: {
         if (ytdlService) {
@@ -290,8 +322,9 @@ Flickable {
       accent: root.activeColor
       bordered: true
       hasCursor: root.cursorActive && root.visibleItems[root.selectedIndex] === "back"
-      onHovered: function(isHovered) {
-        if (isHovered) root.hoverKey("back")
+      onHovered: function (isHovered) {
+        if (isHovered)
+          root.hoverKey("back");
       }
       onClicked: root.closeRequested()
     }

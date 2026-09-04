@@ -26,20 +26,20 @@ Item {
   property var downloads: []
   readonly property int downloadCount: downloads.length
   readonly property int activeCount: {
-    var n = 0
+    var n = 0;
     for (var i = 0; i < downloads.length; i++) {
       if (downloads[i].status === "downloading")
-        n++
+        n++;
     }
-    return n
+    return n;
   }
   readonly property int queuedCount: {
-    var n = 0
+    var n = 0;
     for (var i = 0; i < downloads.length; i++) {
       if (downloads[i].status === "queued")
-        n++
+        n++;
     }
-    return n
+    return n;
   }
 
   // Playlist resolution state. Enumerated videos are queued into `downloads`
@@ -76,12 +76,12 @@ Item {
   readonly property string statePath: Quickshell.env("HOME") + "/.local/state/omarchy/ytdl-quality"
   readonly property string historyPath: Quickshell.env("HOME") + "/.local/state/omarchy/ytdl-history.json"
 
-  signal downloadsUpdated()
-  signal historyUpdated()
+  signal downloadsUpdated
+  signal historyUpdated
 
   // Emitted so the panel (injected into the bar widget) can react to IPC
   // requests; the service itself has no handle on the panel instance.
-  signal openPanelRequested()
+  signal openPanelRequested
   signal openSettingsRequested(bool open)
 
   readonly property string scriptPath: Qt.resolvedUrl("scripts/ytdl").toString().replace(/^file:\/\//, "")
@@ -110,37 +110,39 @@ Item {
       property string _playlistName: ""
       property string _labelPrefix: ""
       property bool _gotSubs: false
-      readonly property string displayTitle: _labelPrefix === ""
-        ? title
-        : "[" + _labelPrefix + "] " + title
+      readonly property string displayTitle: _labelPrefix === "" ? title : "[" + _labelPrefix + "] " + title
     }
   }
 
   function configure(settings) {
-    if (!settings) return
+    if (!settings)
+      return;
     if (settings.downloadLocation)
-      downloadLocation = settings.downloadLocation
+      downloadLocation = settings.downloadLocation;
     if (settings.defaultQuality) {
-      defaultQuality = settings.defaultQuality
-      if (!root._qualityFromFile) selectedQuality = settings.defaultQuality
+      defaultQuality = settings.defaultQuality;
+      if (!root._qualityFromFile)
+        selectedQuality = settings.defaultQuality;
     }
     if (settings.defaultDownloadType)
-      defaultDownloadType = settings.defaultDownloadType
+      defaultDownloadType = settings.defaultDownloadType;
     if (settings.cookiesBrowser)
-      cookiesBrowser = settings.cookiesBrowser
+      cookiesBrowser = settings.cookiesBrowser;
     if (settings.extraArgs != null)
-      extraArgs = settings.extraArgs
+      extraArgs = settings.extraArgs;
     // Config values can arrive as strings ("false") if an older build ever
     // persisted one; coerce instead of letting !!"false" be true.
-    function asBool(v) { return v === true || v === "true" }
+    function asBool(v) {
+      return v === true || v === "true";
+    }
     if (settings.enableHistory != null)
-      enableHistory = asBool(settings.enableHistory)
+      enableHistory = asBool(settings.enableHistory);
     if (settings.downloadTranscripts != null)
-      downloadTranscripts = asBool(settings.downloadTranscripts)
+      downloadTranscripts = asBool(settings.downloadTranscripts);
     if (settings.transcriptLanguages)
-      transcriptLanguages = settings.transcriptLanguages
+      transcriptLanguages = settings.transcriptLanguages;
     if (settings.playlistInSeparateFolder != null)
-      playlistInSeparateFolder = asBool(settings.playlistInSeparateFolder)
+      playlistInSeparateFolder = asBool(settings.playlistInSeparateFolder);
   }
 
   function updateSetting(key, value) {
@@ -151,100 +153,102 @@ Item {
       return;
     }
     if (shell && typeof shell.mutateShellConfig === "function") {
-      shell.mutateShellConfig(function(copy) {
-        if (copy.bar && copy.bar.layout) {
-          var sections = ["left", "center", "right"];
-          for (var si = 0; si < sections.length; si++) {
-            var entries = copy.bar.layout[sections[si]];
-            if (!Array.isArray(entries)) continue;
-            for (var ei = 0; ei < entries.length; ei++) {
-              if (entries[ei] && String(entries[ei].id) === "bibek.ytdl")
-                entries[ei][key] = value;
+      shell.mutateShellConfig(function (copy) {
+          if (copy.bar && copy.bar.layout) {
+            var sections = ["left", "center", "right"];
+            for (var si = 0; si < sections.length; si++) {
+              var entries = copy.bar.layout[sections[si]];
+              if (!Array.isArray(entries))
+                continue;
+              for (var ei = 0; ei < entries.length; ei++) {
+                if (entries[ei] && String(entries[ei].id) === "bibek.ytdl")
+                  entries[ei][key] = value;
+              }
             }
           }
-        }
-        if (Array.isArray(copy.plugins)) {
-          for (var pi = 0; pi < copy.plugins.length; pi++) {
-            if (copy.plugins[pi] && String(copy.plugins[pi].id) === "bibek.ytdl")
-              copy.plugins[pi][key] = value;
+          if (Array.isArray(copy.plugins)) {
+            for (var pi = 0; pi < copy.plugins.length; pi++) {
+              if (copy.plugins[pi] && String(copy.plugins[pi].id) === "bibek.ytdl")
+                copy.plugins[pi][key] = value;
+            }
           }
-        }
-      });
+        });
     }
   }
 
   function persistQuality() {
-    root._qualityFromFile = true
-    Quickshell.execDetached(["sh", "-c", "printf '%s' '" + root.selectedQuality + "' > " + root.statePath])
+    root._qualityFromFile = true;
+    Quickshell.execDetached(["sh", "-c", "printf '%s' '" + root.selectedQuality + "' > " + root.statePath]);
   }
 
   // Cycling quality in the panel also rewrites the defaultQuality setting so
   // the shell.json config, not just the in-memory selection, follows the user.
   function setDefaultQuality(q) {
-    root.defaultQuality = q
+    root.defaultQuality = q;
     if (shell && typeof shell.mutateShellConfig === "function") {
-      shell.mutateShellConfig(function(copy) {
-        if (copy.bar && copy.bar.layout) {
-          var sections = ["left", "center", "right"]
-          for (var si = 0; si < sections.length; si++) {
-            var entries = copy.bar.layout[sections[si]]
-            if (!Array.isArray(entries)) continue
-            for (var ei = 0; ei < entries.length; ei++) {
-              if (entries[ei] && String(entries[ei].id) === "bibek.ytdl")
-                entries[ei].defaultQuality = q
+      shell.mutateShellConfig(function (copy) {
+          if (copy.bar && copy.bar.layout) {
+            var sections = ["left", "center", "right"];
+            for (var si = 0; si < sections.length; si++) {
+              var entries = copy.bar.layout[sections[si]];
+              if (!Array.isArray(entries))
+                continue;
+              for (var ei = 0; ei < entries.length; ei++) {
+                if (entries[ei] && String(entries[ei].id) === "bibek.ytdl")
+                  entries[ei].defaultQuality = q;
+              }
             }
           }
-        }
-        if (Array.isArray(copy.plugins)) {
-          for (var pi = 0; pi < copy.plugins.length; pi++) {
-            if (copy.plugins[pi] && String(copy.plugins[pi].id) === "bibek.ytdl")
-              copy.plugins[pi].defaultQuality = q
+          if (Array.isArray(copy.plugins)) {
+            for (var pi = 0; pi < copy.plugins.length; pi++) {
+              if (copy.plugins[pi] && String(copy.plugins[pi].id) === "bibek.ytdl")
+                copy.plugins[pi].defaultQuality = q;
+            }
           }
-        }
-      })
+        });
     }
   }
 
   function historyToJSON() {
-    var out = []
+    var out = [];
     for (var i = 0; i < history.length; i++) {
-      var h = history[i]
+      var h = history[i];
       out.push({
-        dwnId: h.dwnId,
-        url: h.url,
-        title: h.title,
-        status: h.status,
-        filepath: h.filepath,
-        error: h.error,
-        downloadType: h._downloadType || "",
-        labelPrefix: h._labelPrefix || ""
-      })
+          "dwnId": h.dwnId,
+          "url": h.url,
+          "title": h.title,
+          "status": h.status,
+          "filepath": h.filepath,
+          "error": h.error,
+          "downloadType": h._downloadType || "",
+          "labelPrefix": h._labelPrefix || ""
+        });
     }
-    return JSON.stringify(out)
+    return JSON.stringify(out);
   }
 
   function historyFromJSON(list) {
-    var out = []
-    if (!Array.isArray(list)) return out
+    var out = [];
+    if (!Array.isArray(list))
+      return out;
     for (var i = 0; i < list.length; i++) {
-      var it = list[i] || {}
-      var d = downloadComp.createObject(root)
-      d.dwnId = it.dwnId !== undefined ? it.dwnId : -1
-      d.url = it.url || ""
-      d.title = it.title || ""
-      d.status = it.status || "error"
-      d.filepath = it.filepath || ""
-      d.error = it.error || ""
-      d._downloadType = it.downloadType || ""
-      d._labelPrefix = it.labelPrefix || ""
-      out.push(d)
+      var it = list[i] || {};
+      var d = downloadComp.createObject(root);
+      d.dwnId = it.dwnId !== undefined ? it.dwnId : -1;
+      d.url = it.url || "";
+      d.title = it.title || "";
+      d.status = it.status || "error";
+      d.filepath = it.filepath || "";
+      d.error = it.error || "";
+      d._downloadType = it.downloadType || "";
+      d._labelPrefix = it.labelPrefix || "";
+      out.push(d);
     }
-    return out
+    return out;
   }
 
   function persistHistory() {
-    Quickshell.execDetached(["env", "YTDL_HISTORY=" + root.historyToJSON(),
-      "sh", "-c", "printf %s \"$YTDL_HISTORY\" > " + root.historyPath])
+    Quickshell.execDetached(["env", "YTDL_HISTORY=" + root.historyToJSON(), "sh", "-c", "printf %s \"$YTDL_HISTORY\" > " + root.historyPath]);
   }
 
   FileView {
@@ -253,15 +257,17 @@ Item {
     preload: true
     printErrors: false
     onLoaded: {
-      var text = String(this.text() || "").trim()
-      if (!text) return
+      var text = String(this.text() || "").trim();
+      if (!text)
+        return;
       try {
-        var parsed = JSON.parse(text)
+        var parsed = JSON.parse(text);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          root.history = root.historyFromJSON(parsed)
-          root.historyUpdated()
+          root.history = root.historyFromJSON(parsed);
+          root.historyUpdated();
         }
-      } catch (e) { /* corrupt state file, start with empty history */ }
+      } catch (e) {
+      }
     }
   }
 
@@ -271,106 +277,122 @@ Item {
     preload: true
     printErrors: false
     onLoaded: {
-      var v = String(text()).trim()
+      var v = String(text()).trim();
       if (["best", "1080p", "720p", "480p"].indexOf(v) !== -1) {
-        root._qualityFromFile = true
-        root.selectedQuality = v
+        root._qualityFromFile = true;
+        root.selectedQuality = v;
       }
     }
   }
 
   function cleanUrl(url) {
-    url = String(url || "").trim()
-    url = url.replace(/^yt-dlp:/, "").replace(/^ytdl:/, "")
-    return url
+    url = String(url || "").trim();
+    url = url.replace(/^yt-dlp:/, "").replace(/^ytdl:/, "");
+    return url;
   }
 
   function extractVideoId(url) {
-    var m = url.match(/(?:v=|youtu\.be\/|shorts\/)([\w-]{11})/)
-    return m ? m[1] : null
+    var m = url.match(/(?:v=|youtu\.be\/|shorts\/)([\w-]{11})/);
+    return m ? m[1] : null;
   }
 
   function isYouTubeUrl(text) {
-    return /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:watch\?v=|shorts\/|playlist\?list=)|youtu\.be\/)[\w-]+/.test(text)
+    return /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:watch\?v=|shorts\/|playlist\?list=)|youtu\.be\/)[\w-]+/.test(text);
   }
 
   // A pure playlist URL (no video id) downloads the whole playlist. Watch URLs
   // copied from a playlist page (v=...&list=...) download just that video; the
   // "Playlist detected" panel section offers the playlist separately.
   function isPlaylistUrl(url) {
-    if (!/[?&]list=/.test(url)) return false
-    return !root.extractVideoId(url)
+    if (!/[?&]list=/.test(url))
+      return false;
+    return !root.extractVideoId(url);
   }
 
   // True when `url` is already downloading, queued, or already downloaded.
   // Matches by video id too, so a watch URL copied with a `list=` param is
   // seen as the same download as its bare-watch twin already in progress.
   function isUrlBusy(url, downloadType, labelPrefix) {
-    url = cleanUrl(url)
-    var vid = root.extractVideoId(url)
+    url = cleanUrl(url);
+    var vid = root.extractVideoId(url);
     for (var i = 0; i < downloads.length; i++) {
-      var d = downloads[i]
-      var s = d.status
-      if (s !== "downloading" && s !== "queued") continue
-      
+      var d = downloads[i];
+      var s = d.status;
+      if (s !== "downloading" && s !== "queued")
+        continue;
+
       // Check if this specific format is busy by matching URL + downloadType
       if (downloadType && d._downloadType) {
-        if (d.url === url && d._downloadType === downloadType) return true
-        if (vid && root.extractVideoId(d.url) === vid && d._downloadType === downloadType) return true
+        if (d.url === url && d._downloadType === downloadType)
+          return true;
+        if (vid && root.extractVideoId(d.url) === vid && d._downloadType === downloadType)
+          return true;
       } else {
-        if (d.url === url) return true
-        if (vid && root.extractVideoId(d.url) === vid) return true
+        if (d.url === url)
+          return true;
+        if (vid && root.extractVideoId(d.url) === vid)
+          return true;
       }
     }
     // Check history - match by URL + downloadType for specific format checks
     if (downloadType) {
       for (var j = 0; j < history.length; j++) {
-        var h = history[j]
-        if (h.status !== "done") continue
-        if (h.url === url && h._downloadType === downloadType) return true
-        if (vid && root.extractVideoId(h.url) === vid && h._downloadType === downloadType) return true
+        var h = history[j];
+        if (h.status !== "done")
+          continue;
+        if (h.url === url && h._downloadType === downloadType)
+          return true;
+        if (vid && root.extractVideoId(h.url) === vid && h._downloadType === downloadType)
+          return true;
       }
     } else {
       for (var k = 0; k < history.length; k++) {
-        var h2 = history[k]
-        if (h2.status !== "done") continue
-        if (h2.url === url) return true
-        if (vid && root.extractVideoId(h2.url) === vid) return true
+        var h2 = history[k];
+        if (h2.status !== "done")
+          continue;
+        if (h2.url === url)
+          return true;
+        if (vid && root.extractVideoId(h2.url) === vid)
+          return true;
       }
     }
-    return false
+    return false;
   }
 
   function updateDownload(id, props) {
     for (var i = 0; i < downloads.length; i++) {
-      var d = downloads[i]
+      var d = downloads[i];
       if (d.dwnId === id) {
         for (var k in props) {
           // yt-dlp opens fragmented streams with a placeholder line of
           // "100.0% of ~1.00KiB" before the real total is known, then reports
           // the true (lower) percentage. Ignore it and clamp so the bar never
           // regresses; the real 100% is set by the exit handler.
-          if (k === "progress" && (props[k] >= 100 || props[k] < d.progress)) continue
-          d[k] = props[k]
+          if (k === "progress" && (props[k] >= 100 || props[k] < d.progress))
+            continue;
+          d[k] = props[k];
         }
-        downloadsUpdated()
-        return
+        downloadsUpdated();
+        return;
       }
     }
   }
 
   function procAt(i) {
-    if (i === 0) return dlProc0
-    if (i === 1) return dlProc1
-    return dlProc2
+    if (i === 0)
+      return dlProc0;
+    if (i === 1)
+      return dlProc1;
+    return dlProc2;
   }
 
   function findFreeProc() {
     for (var i = 0; i < 3; i++) {
-      var p = procAt(i)
-      if (!p._draining && !p.running) return i
+      var p = procAt(i);
+      if (!p._draining && !p.running)
+        return i;
     }
-    return -1
+    return -1;
   }
 
   // Self-heal proc/download desyncs that a race can leave behind (e.g. a
@@ -381,47 +403,54 @@ Item {
   // short timer so any desync repairs itself within a tick.
   function reconcileProcs() {
     for (var i = 0; i < 3; i++) {
-      var p = procAt(i)
-      if (!p.running) continue
-      var tracked = false
+      var p = procAt(i);
+      if (!p.running)
+        continue;
+      var tracked = false;
       for (var j = 0; j < downloads.length; j++) {
         if (downloads[j].status === "downloading" && downloads[j].procIdx === i) {
-          tracked = true
-          break
+          tracked = true;
+          break;
         }
       }
-      if (tracked) continue
-      var pvid = root.extractVideoId(p._url)
-      var target = -1
+      if (tracked)
+        continue;
+      var pvid = root.extractVideoId(p._url);
+      var target = -1;
       for (var k = 0; k < downloads.length; k++) {
-        var q = downloads[k]
-        if (q.status !== "queued") continue
-        if (pvid && root.extractVideoId(q.url) === pvid) { target = k; break }
+        var q = downloads[k];
+        if (q.status !== "queued")
+          continue;
+        if (pvid && root.extractVideoId(q.url) === pvid) {
+          target = k;
+          break;
+        }
       }
       if (target >= 0) {
-        var t = downloads[target]
-        p.downloadId = t.dwnId
-        p._errBuf = ""
-        t.procIdx = i
-        t.status = "downloading"
-        downloadsUpdated()
+        var t = downloads[target];
+        p.downloadId = t.dwnId;
+        p._errBuf = "";
+        t.procIdx = i;
+        t.status = "downloading";
+        downloadsUpdated();
       } else {
-        var pid = p.processId
+        var pid = p.processId;
         if (pid && typeof pid === "number" && pid > 0)
-          Quickshell.execDetached([scriptPath, "kill-tree", String(pid)])
-        p._draining = true
+          Quickshell.execDetached([scriptPath, "kill-tree", String(pid)]);
+        p._draining = true;
       }
     }
   }
 
   function startDownload(url, quality, isPlaylistItem, knownTitle, downloadType, playlistName) {
-    url = cleanUrl(url)
-    if (!url) return
-    var dtype = downloadType || defaultDownloadType
+    url = cleanUrl(url);
+    if (!url)
+      return;
+    var dtype = downloadType || defaultDownloadType;
     // Check if URL is busy (allow different formats of the same video)
     if (!isPlaylistItem && root.isPlaylistUrl(url)) {
-      root.startPlaylist(url, quality)
-      return
+      root.startPlaylist(url, quality);
+      return;
     }
 
     // "both" fetches two separate files for the same video; each becomes its
@@ -429,244 +458,240 @@ Item {
     // between streams. Transcripts get a third entry (skipped for playlist
     // items to avoid doubling every queued video).
     if (dtype === "both") {
-      root._spawnDownload(url, quality || selectedQuality, "video", "Video", isPlaylistItem, knownTitle, playlistName)
-      root._spawnDownload(url, quality || selectedQuality, "audio", "Audio", isPlaylistItem, knownTitle, playlistName)
+      root._spawnDownload(url, quality || selectedQuality, "video", "Video", isPlaylistItem, knownTitle, playlistName);
+      root._spawnDownload(url, quality || selectedQuality, "audio", "Audio", isPlaylistItem, knownTitle, playlistName);
     } else {
-      root._spawnDownload(url, quality || defaultQuality, dtype, "", isPlaylistItem, knownTitle, playlistName)
+      root._spawnDownload(url, quality || defaultQuality, dtype, "", isPlaylistItem, knownTitle, playlistName);
     }
     if (root.downloadTranscripts && !isPlaylistItem) {
-      root._spawnDownload(url, quality || defaultQuality, "transcript", "Transcript", isPlaylistItem, knownTitle, playlistName)
+      root._spawnDownload(url, quality || defaultQuality, "transcript", "Transcript", isPlaylistItem, knownTitle, playlistName);
     }
   }
 
   function _spawnDownload(url, quality, downloadType, labelPrefix, isPlaylistItem, knownTitle, playlistName) {
     // Check if this specific format is already busy
-    if (root.isUrlBusy(url, downloadType)) return
-    
-    var id = Date.now() + Math.floor(Math.random() * 1000)
-    var q = quality
-    var subs = downloadTranscripts && downloadType !== "audio"
-    var subLangs = transcriptLanguages
-
-    var outputTemplate = downloadLocation
+    if (root.isUrlBusy(url, downloadType))
+      return;
+    var id = Date.now() + Math.floor(Math.random() * 1000);
+    var q = quality;
+    var subs = downloadTranscripts && downloadType !== "audio";
+    var subLangs = transcriptLanguages;
+    var outputTemplate = downloadLocation;
     if (playlistName && playlistInSeparateFolder) {
-      outputTemplate += "/" + playlistName
+      outputTemplate += "/" + playlistName;
     }
     // For audio-only downloads, add a suffix to prevent conflicts with video files
     // yt-dlp's -x flag extracts audio and deletes the intermediate video file
     if (downloadType === "audio") {
-      outputTemplate += "/%(title)s [audio].%(ext)s"
+      outputTemplate += "/%(title)s [audio].%(ext)s";
     } else {
-      outputTemplate += "/%(title)s.%(ext)s"
+      outputTemplate += "/%(title)s.%(ext)s";
     }
 
     // "transcript" maps to the script's subs-only mode; it writes no media.
-    var scriptType = downloadType === "transcript" ? "subs" : downloadType
-    var cmd = [scriptPath, "download", url, q, scriptType,
-               subLangs, outputTemplate, cookiesBrowser, extraArgs]
-
-
-    var d = downloadComp.createObject(root)
-    d.dwnId = id
-    d.url = url
-    d.title = knownTitle || extractVideoId(url) || url
-    d.procIdx = -1
-    d._quality = q
-    d._downloadType = downloadType
-    d._transcriptLanguages = subLangs
-    d._playlistItem = !!isPlaylistItem
-    d._playlistName = playlistName || ""
-    d._labelPrefix = labelPrefix || ""
-
-    var procIdx = findFreeProc()
+    var scriptType = downloadType === "transcript" ? "subs" : downloadType;
+    var cmd = [scriptPath, "download", url, q, scriptType, subLangs, outputTemplate, cookiesBrowser, extraArgs];
+    var d = downloadComp.createObject(root);
+    d.dwnId = id;
+    d.url = url;
+    d.title = knownTitle || extractVideoId(url) || url;
+    d.procIdx = -1;
+    d._quality = q;
+    d._downloadType = downloadType;
+    d._transcriptLanguages = subLangs;
+    d._playlistItem = !!isPlaylistItem;
+    d._playlistName = playlistName || "";
+    d._labelPrefix = labelPrefix || "";
+    var procIdx = findFreeProc();
     if (procIdx === -1) {
-      d.status = "queued"
-      downloads = downloads.concat([d])
-      downloadsUpdated()
-      if (!knownTitle) root._fetchTitle(id, url)
-      return
+      d.status = "queued";
+      downloads = downloads.concat([d]);
+      downloadsUpdated();
+      if (!knownTitle)
+        root._fetchTitle(id, url);
+      return;
     }
-
-    downloads = downloads.concat([d])
-    downloadsUpdated()
-
-    var proc = procAt(procIdx)
-    proc.downloadId = id
-    proc._errBuf = ""
-    proc._url = url
-    proc.command = cmd
-    proc.running = true
-    d.procIdx = procIdx
-
-    if (!knownTitle) root._fetchTitle(id, url)
+    downloads = downloads.concat([d]);
+    downloadsUpdated();
+    var proc = procAt(procIdx);
+    proc.downloadId = id;
+    proc._errBuf = "";
+    proc._url = url;
+    proc.command = cmd;
+    proc.running = true;
+    d.procIdx = procIdx;
+    if (!knownTitle)
+      root._fetchTitle(id, url);
   }
 
   // Start queued downloads on any free procs, in FIFO order. Called whenever a
   // proc frees up (a download completes or is cancelled).
   function _startNextQueued() {
     for (var i = 0; i < downloads.length; i++) {
-      if (downloads[i].status !== "queued") continue
-      var procIdx = findFreeProc()
-      if (procIdx === -1) return
-      var d = downloads[i]
-      
-      var outputTemplate = downloadLocation
+      if (downloads[i].status !== "queued")
+        continue;
+      var procIdx = findFreeProc();
+      if (procIdx === -1)
+        return;
+      var d = downloads[i];
+      var outputTemplate = downloadLocation;
       if (d._playlistName && playlistInSeparateFolder) {
-        outputTemplate += "/" + d._playlistName
+        outputTemplate += "/" + d._playlistName;
       }
       // For audio-only downloads, add a suffix to prevent conflicts with video files
       if (d._downloadType === "audio") {
-        outputTemplate += "/%(title)s [audio].%(ext)s"
+        outputTemplate += "/%(title)s [audio].%(ext)s";
       } else {
-        outputTemplate += "/%(title)s.%(ext)s"
+        outputTemplate += "/%(title)s.%(ext)s";
       }
-
-      var qScriptType = d._downloadType === "transcript" ? "subs" : d._downloadType
-      var cmd = [scriptPath, "download", d.url, d._quality, qScriptType,
-                 d._transcriptLanguages, outputTemplate, cookiesBrowser, extraArgs]
-      var proc = procAt(procIdx)
-      proc.downloadId = d.dwnId
-      proc._errBuf = ""
-      proc._url = d.url
-      proc.command = cmd
-      proc.running = true
-      d.procIdx = procIdx
-      d.status = "downloading"
-      downloadsUpdated()
-      var isKnownTitle = d.title && d.title !== d.url && d.title !== root.extractVideoId(d.url)
-      if (!isKnownTitle) root._fetchTitle(d.dwnId, d.url)
+      var qScriptType = d._downloadType === "transcript" ? "subs" : d._downloadType;
+      var cmd = [scriptPath, "download", d.url, d._quality, qScriptType, d._transcriptLanguages, outputTemplate, cookiesBrowser, extraArgs];
+      var proc = procAt(procIdx);
+      proc.downloadId = d.dwnId;
+      proc._errBuf = "";
+      proc._url = d.url;
+      proc.command = cmd;
+      proc.running = true;
+      d.procIdx = procIdx;
+      d.status = "downloading";
+      downloadsUpdated();
+      var isKnownTitle = d.title && d.title !== d.url && d.title !== root.extractVideoId(d.url);
+      if (!isKnownTitle)
+        root._fetchTitle(d.dwnId, d.url);
     }
   }
 
   function clearQueue() {
-    var remaining = []
+    var remaining = [];
     for (var i = 0; i < downloads.length; i++) {
-      if (downloads[i].status !== "queued") remaining.push(downloads[i])
+      if (downloads[i].status !== "queued")
+        remaining.push(downloads[i]);
     }
-    downloads = remaining
-    downloadsUpdated()
+    downloads = remaining;
+    downloadsUpdated();
   }
 
   function removeQueued(id) {
     for (var i = 0; i < downloads.length; i++) {
       if (downloads[i].dwnId === id && downloads[i].status === "queued") {
-        downloads = removeById(downloads, id)
-        downloadsUpdated()
-        return
+        downloads = removeById(downloads, id);
+        downloadsUpdated();
+        return;
       }
     }
   }
 
   function cancelAll() {
-    var ids = []
+    var ids = [];
     for (var i = 0; i < downloads.length; i++) {
       if (downloads[i].status === "downloading")
-        ids.push(downloads[i].dwnId)
+        ids.push(downloads[i].dwnId);
     }
     for (var j = 0; j < ids.length; j++)
-      root.cancelDownload(ids[j])
+      root.cancelDownload(ids[j]);
   }
 
   // Resolve a playlist to its individual videos, then queue them as normal
   // downloads (they start as procs free up, like any pasted video). A
   // placeholder entry gives feedback while the flat enumeration runs.
   function startPlaylist(url, quality, downloadType) {
-    root._playlistQuality = quality || defaultQuality
-    root._playlistDownloadType = downloadType || defaultDownloadType
-    root._playlistError = ""
-    var id = Date.now() + Math.floor(Math.random() * 1000)
-    var d = downloadComp.createObject(root)
-    d.dwnId = id
-    d.url = url
-    d.title = "Resolving playlist\u2026"
-    d.procIdx = -1
-    d._playlistPlaceholder = true
-
-    downloads = downloads.concat([d])
-    downloadsUpdated()
-
-    playlistProc.downloadId = id
-    playlistProc.command = [scriptPath, "playlist-items", url, cookiesBrowser, extraArgs]
-    playlistProc.running = true
+    root._playlistQuality = quality || defaultQuality;
+    root._playlistDownloadType = downloadType || defaultDownloadType;
+    root._playlistError = "";
+    var id = Date.now() + Math.floor(Math.random() * 1000);
+    var d = downloadComp.createObject(root);
+    d.dwnId = id;
+    d.url = url;
+    d.title = "Resolving playlist\u2026";
+    d.procIdx = -1;
+    d._playlistPlaceholder = true;
+    downloads = downloads.concat([d]);
+    downloadsUpdated();
+    playlistProc.downloadId = id;
+    playlistProc.command = [scriptPath, "playlist-items", url, cookiesBrowser, extraArgs];
+    playlistProc.running = true;
   }
 
   // Resolve a playlist's title and video count for the "Playlist detected"
   // panel preview. Debounced by the panel; stale in-flight fetches are dropped
   // via a request counter, so a fast retype can't surface an old result.
   function fetchPlaylistInfo(url) {
-    url = cleanUrl(url)
+    url = cleanUrl(url);
     // Only video URLs copied from a playlist page (v=...&list=...) need the
     // preview; a bare playlist URL downloads the whole playlist via the main
     // button already, so there is nothing to surface.
     if (!url || !/[?&]list=/.test(url) || !root.extractVideoId(url)) {
-      root.clearPlaylistInfo()
-      return
+      root.clearPlaylistInfo();
+      return;
     }
-    root._playlistInfoReq++
-    if (playlistInfoProc.running) playlistInfoProc.running = false
-    playlistInfoProc._req = root._playlistInfoReq
-    playlistInfoProc.command = [scriptPath, "playlist-info", url, cookiesBrowser, extraArgs]
-    playlistInfoProc.running = true
-    root.playlistInfoUrl = url
-    root.playlistInfoName = ""
-    root.playlistInfoCount = 0
-    root.playlistInfoLoading = true
-    root.playlistInfoError = false
+    root._playlistInfoReq++;
+    if (playlistInfoProc.running)
+      playlistInfoProc.running = false;
+    playlistInfoProc._req = root._playlistInfoReq;
+    playlistInfoProc.command = [scriptPath, "playlist-info", url, cookiesBrowser, extraArgs];
+    playlistInfoProc.running = true;
+    root.playlistInfoUrl = url;
+    root.playlistInfoName = "";
+    root.playlistInfoCount = 0;
+    root.playlistInfoLoading = true;
+    root.playlistInfoError = false;
   }
 
   function clearPlaylistInfo() {
-    root.playlistInfoUrl = ""
-    root.playlistInfoName = ""
-    root.playlistInfoCount = 0
-    root.playlistInfoLoading = false
-    root.playlistInfoError = false
+    root.playlistInfoUrl = "";
+    root.playlistInfoName = "";
+    root.playlistInfoCount = 0;
+    root.playlistInfoLoading = false;
+    root.playlistInfoError = false;
   }
 
   function retryDownload(item) {
-    if (!item || !item.url) return
-    removeHistoryItem(item.dwnId)
+    if (!item || !item.url)
+      return;
+    removeHistoryItem(item.dwnId);
     // Keep the original playlist context and title so a retried item
     // goes back into its original folder and doesn't re-fetch the title.
-    startDownload(item.url, root.selectedQuality || defaultQuality, item._playlistItem || false, item.title || "", item._downloadType || "", item._playlistName || "")
+    startDownload(item.url, root.selectedQuality || defaultQuality, item._playlistItem || false, item.title || "", item._downloadType || "", item._playlistName || "");
   }
 
   function retryAll() {
-    var itemsToRetry = []
+    var itemsToRetry = [];
     for (var i = 0; i < history.length; i++) {
       if (history[i].status === "error" || history[i].status === "cancelled") {
-        itemsToRetry.push(history[i])
+        itemsToRetry.push(history[i]);
       }
     }
     for (var j = 0; j < itemsToRetry.length; j++) {
-      retryDownload(itemsToRetry[j])
+      retryDownload(itemsToRetry[j]);
     }
   }
 
   function cancelDownload(id) {
     for (var i = 0; i < downloads.length; i++) {
-      var d = downloads[i]
+      var d = downloads[i];
       if (d.dwnId === id) {
         if (d.status === "queued") {
-          root.downloads = root.removeById(root.downloads, id)
-          root.downloadsUpdated()
-          return
+          root.downloads = root.removeById(root.downloads, id);
+          root.downloadsUpdated();
+          return;
         }
         if (d._playlistPlaceholder) {
-          if (playlistProc.running) playlistProc.running = false
-          playlistProc.downloadId = -1
-          root.downloads = root.removeById(root.downloads, id)
-          root.downloadsUpdated()
-          return
+          if (playlistProc.running)
+            playlistProc.running = false;
+          playlistProc.downloadId = -1;
+          root.downloads = root.removeById(root.downloads, id);
+          root.downloadsUpdated();
+          return;
         }
         if (d.procIdx >= 0) {
-          var proc = procAt(d.procIdx)
-          var pid = proc.processId
-          proc.downloadId = -1
+          var proc = procAt(d.procIdx);
+          var pid = proc.processId;
+          proc.downloadId = -1;
           if (proc.running) {
             // Mark the proc as draining so no new download starts on it until
             // its process has actually exited (onExited clears the flag).
-            proc._draining = true
-            proc.running = false
+            proc._draining = true;
+            proc.running = false;
           }
         }
         if (d.filepath) {
@@ -675,56 +700,57 @@ Item {
             // die, then drop the partials. Quickshell only SIGTERMs the direct
             // child, which would otherwise orphan yt-dlp and leave it
             // downloading in the background.
-            Quickshell.execDetached([scriptPath, "cancel", String(pid), d.filepath])
+            Quickshell.execDetached([scriptPath, "cancel", String(pid), d.filepath]);
           } else {
-            Quickshell.execDetached([scriptPath, "cleanup", d.filepath])
+            Quickshell.execDetached([scriptPath, "cleanup", d.filepath]);
           }
         }
-        d.status = "cancelled"
-        d.progress = 0
-        d.procIdx = -1
-        downloads = removeById(downloads, id)
+        d.status = "cancelled";
+        d.progress = 0;
+        d.procIdx = -1;
+        downloads = removeById(downloads, id);
         if (root.enableHistory) {
-          history = [d].concat(history)
-          root.persistHistory()
+          history = [d].concat(history);
+          root.persistHistory();
         }
-        downloadsUpdated()
-        historyUpdated()
+        downloadsUpdated();
+        historyUpdated();
         // A proc just freed up (or its exit is imminent); let a queued download
         // take its slot. Promotion is retried once the process exits.
-        Qt.callLater(root._startNextQueued)
-        return
+        Qt.callLater(root._startNextQueued);
+        return;
       }
     }
   }
 
   function clearHistory() {
-    history = []
-    root.persistHistory()
-    historyUpdated()
+    history = [];
+    root.persistHistory();
+    historyUpdated();
   }
 
   function removeHistoryItem(id) {
-    history = removeById(history, id)
-    root.persistHistory()
-    historyUpdated()
+    history = removeById(history, id);
+    root.persistHistory();
+    historyUpdated();
   }
 
   function deleteHistoryItem(id) {
     for (var i = 0; i < history.length; i++) {
       if (history[i].dwnId === id && history[i].filepath) {
-        Quickshell.execDetached(["rm", "-f", history[i].filepath])
-        break
+        Quickshell.execDetached(["rm", "-f", history[i].filepath]);
+        break;
       }
     }
-    root.removeHistoryItem(id)
+    root.removeHistoryItem(id);
   }
 
   // Drop history entries whose downloaded file has been deleted from disk.
   function pruneMissing() {
-    if (!root.history.length || pruneProc.running) return
-    pruneProc.command = [scriptPath, "prune-missing", root.historyPath]
-    pruneProc.running = true
+    if (!root.history.length || pruneProc.running)
+      return;
+    pruneProc.command = [scriptPath, "prune-missing", root.historyPath];
+    pruneProc.running = true;
   }
 
   Process {
@@ -732,161 +758,178 @@ Item {
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
-        var text = String(this.text || "").trim()
-        if (!text) return
+        var text = String(this.text || "").trim();
+        if (!text)
+          return;
         try {
-          var missing = JSON.parse(text)
-          if (!Array.isArray(missing) || missing.length === 0) return
-          var missingMap = {}
-          for (var i = 0; i < missing.length; i++) missingMap[missing[i]] = true
-          var pruned = []
-          var changed = false
+          var missing = JSON.parse(text);
+          if (!Array.isArray(missing) || missing.length === 0)
+            return;
+          var missingMap = {};
+          for (var i = 0; i < missing.length; i++)
+            missingMap[missing[i]] = true;
+          var pruned = [];
+          var changed = false;
           for (var j = 0; j < root.history.length; j++) {
-            var it = root.history[j]
+            var it = root.history[j];
             if (it.filepath && missingMap[it.filepath]) {
-              changed = true
-              continue
+              changed = true;
+              continue;
             }
-            pruned.push(it)
+            pruned.push(it);
           }
           if (changed) {
-            root.history = pruned
-            root.persistHistory()
-            root.historyUpdated()
+            root.history = pruned;
+            root.persistHistory();
+            root.historyUpdated();
           }
-        } catch (e) { /* malformed prune output, keep history as-is */ }
+        } catch (e) {
+        }
       }
     }
   }
 
   function removeById(arr, id) {
-    var result = []
+    var result = [];
     for (var i = 0; i < arr.length; i++) {
-      if (arr[i].dwnId !== id) result.push(arr[i])
+      if (arr[i].dwnId !== id)
+        result.push(arr[i]);
     }
-    return result
+    return result;
   }
 
   function playFile(filepath) {
-    if (!filepath) return
-    Quickshell.execDetached(["xdg-open", filepath])
+    if (!filepath)
+      return;
+    Quickshell.execDetached(["xdg-open", filepath]);
   }
 
   function autoDownload() {
-    Quickshell.execDetached([autoDownloadScriptPath])
+    Quickshell.execDetached([autoDownloadScriptPath]);
   }
 
   function onDownloadComplete(id, exitCode) {
     for (var i = 0; i < downloads.length; i++) {
-      var d = downloads[i]
+      var d = downloads[i];
       if (d.dwnId === id) {
         if (exitCode === 0) {
           if (d._downloadType === "transcript" && !d._gotSubs) {
-            d.status = "unavailable"
+            d.status = "unavailable";
           } else {
-            d.status = "done"
-            d.progress = 100
+            d.status = "done";
+            d.progress = 100;
           }
         } else if (d._downloadType === "transcript") {
           // Subs run died before writing anything; report as unavailable
           // unless some subtitle file already landed.
-          d.status = d._gotSubs ? "done" : "unavailable"
+          d.status = d._gotSubs ? "done" : "unavailable";
         } else if (d.status !== "cancelled") {
-          d.status = "error"
+          d.status = "error";
           // Capture the last 20 lines of stderr to show the real cause
-          var errLines = (procAt(d.procIdx)._errBuf || "").split("\n")
-          var lastErrors = errLines.slice(Math.max(errLines.length - 20, 0)).join("\n")
-          d.error = "Failed (Code " + exitCode + "):\n" + lastErrors
-          if (d.filepath) Quickshell.execDetached([scriptPath, "cleanup", d.filepath])
+          var errLines = (procAt(d.procIdx)._errBuf || "").split("\n");
+          var lastErrors = errLines.slice(Math.max(errLines.length - 20, 0)).join("\n");
+          d.error = "Failed (Code " + exitCode + "):\n" + lastErrors;
+          if (d.filepath)
+            Quickshell.execDetached([scriptPath, "cleanup", d.filepath]);
         }
-        d.procIdx = -1
-        downloads = removeById(downloads, id)
-        downloadsUpdated()
+        d.procIdx = -1;
+        downloads = removeById(downloads, id);
+        downloadsUpdated();
         if (d.status === "done" || d.status === "error" || d.status === "unavailable") {
           if (root.enableHistory) {
-            history = [d].concat(history)
-            root.persistHistory()
+            history = [d].concat(history);
+            root.persistHistory();
           }
-          historyUpdated()
+          historyUpdated();
         }
         // A proc just freed up; let a queued download take its slot.
-        Qt.callLater(root._startNextQueued)
-        return
+        Qt.callLater(root._startNextQueued);
+        return;
       }
     }
   }
 
   function parseLine(proc, line) {
-    line = String(line || "").trim()
-    if (!line) return
-    var id = proc.downloadId
+    line = String(line || "").trim();
+    if (!line)
+      return;
+    var id = proc.downloadId;
 
     // Subs-only runs relay each written subtitle file; seeing one flips the
     // record from "no subs" to a real completed transcript.
     if (line.indexOf("SUBFILE ") === 0) {
-      var sp = line.substring(8)
+      var sp = line.substring(8);
       for (var si = 0; si < downloads.length; si++) {
         if (downloads[si].dwnId === id) {
-          downloads[si]._gotSubs = true
-          downloads[si].filepath = sp
-          downloads[si].progress = 100
+          downloads[si]._gotSubs = true;
+          downloads[si].filepath = sp;
+          downloads[si].progress = 100;
           // Extract title from subtitle filepath if not already set properly
           if (!downloads[si].title || downloads[si].title === downloads[si].url || downloads[si].title === root.extractVideoId(downloads[si].url)) {
-            var subName = sp.replace(/^.*\//, "").replace(/\.[^.]+\.[^.]+$/, "").replace(/\.[^.]+$/, "")
-            if (subName) downloads[si].title = subName
+            var subName = sp.replace(/^.*\//, "").replace(/\.[^.]+\.[^.]+$/, "").replace(/\.[^.]+$/, "");
+            if (subName)
+              downloads[si].title = subName;
           }
         }
       }
-      return
+      return;
     }
-
-    var destMatch = line.match(/\[download\]\s+Destination:\s+(.+)/)
+    var destMatch = line.match(/\[download\]\s+Destination:\s+(.+)/);
     if (destMatch) {
-      var full = destMatch[1].trim()
+      var full = destMatch[1].trim();
       // Remove yt-dlp format codes like .f251-7 from the filepath
       // Pattern: .f<digits>-<digits> or .f<digits> before the final extension
-      var cleanPath = full.replace(/\.f\d+(-\d+)?(\.[^.]+)$/, "$2")
-      var fname = cleanPath.replace(/^.*\//, "").replace(/\.[^.]+$/, "")
-      root.updateDownload(id, { title: fname, filepath: cleanPath })
-      return
+      var cleanPath = full.replace(/\.f\d+(-\d+)?(\.[^.]+)$/, "$2");
+      var fname = cleanPath.replace(/^.*\//, "").replace(/\.[^.]+$/, "");
+      root.updateDownload(id, {
+          "title": fname,
+          "filepath": cleanPath
+        });
+      return;
     }
-
-    var alreadyMatch = line.match(/\[download\]\s+(.+?)\s+has already been downloaded/)
+    var alreadyMatch = line.match(/\[download\]\s+(.+?)\s+has already been downloaded/);
     if (alreadyMatch) {
-      var afull = alreadyMatch[1].trim()
-      var cleanPath2 = afull.replace(/\.f\d+(-\d+)?(\.[^.]+)$/, "$2")
-      var aname = cleanPath2.replace(/^.*\//, "").replace(/\.[^.]+$/, "")
-      root.updateDownload(id, { title: aname, filepath: cleanPath2, progress: 100 })
-      return
+      var afull = alreadyMatch[1].trim();
+      var cleanPath2 = afull.replace(/\.f\d+(-\d+)?(\.[^.]+)$/, "$2");
+      var aname = cleanPath2.replace(/^.*\//, "").replace(/\.[^.]+$/, "");
+      root.updateDownload(id, {
+          "title": aname,
+          "filepath": cleanPath2,
+          "progress": 100
+        });
+      return;
     }
-
-    var extractMatch = line.match(/\[ExtractAudio\]\s+Destination:\s+(.+)/)
+    var extractMatch = line.match(/\[ExtractAudio\]\s+Destination:\s+(.+)/);
     if (extractMatch) {
-      var efull = extractMatch[1].trim()
-      var cleanPath3 = efull.replace(/\.f\d+(-\d+)?(\.[^.]+)$/, "$2")
-      var ename = cleanPath3.replace(/^.*\//, "").replace(/\.[^.]+$/, "")
-      root.updateDownload(id, { title: ename, filepath: cleanPath3 })
-      return
+      var efull = extractMatch[1].trim();
+      var cleanPath3 = efull.replace(/\.f\d+(-\d+)?(\.[^.]+)$/, "$2");
+      var ename = cleanPath3.replace(/^.*\//, "").replace(/\.[^.]+$/, "");
+      root.updateDownload(id, {
+          "title": ename,
+          "filepath": cleanPath3
+        });
+      return;
     }
-
-    var pctMatch = line.match(/\[download\]\s+([\d.]+)%\s+of\s+~?\s*([\d.]+\S+)\s+at\s+([\d.]+\S+)\s+ETA\s+([\d:]+)/)
+    var pctMatch = line.match(/\[download\]\s+([\d.]+)%\s+of\s+~?\s*([\d.]+\S+)\s+at\s+([\d.]+\S+)\s+ETA\s+([\d:]+)/);
     if (pctMatch) {
       root.updateDownload(id, {
-        progress: parseFloat(pctMatch[1]),
-        speed: pctMatch[3],
-        eta: pctMatch[4]
-      })
-      return
+          "progress": parseFloat(pctMatch[1]),
+          "speed": pctMatch[3],
+          "eta": pctMatch[4]
+        });
+      return;
     }
-
-    var pctMatchSimple = line.match(/\[download\]\s+([\d.]+)%/)
+    var pctMatchSimple = line.match(/\[download\]\s+([\d.]+)%/);
     if (pctMatchSimple) {
-      root.updateDownload(id, { progress: parseFloat(pctMatchSimple[1]) })
-      return
+      root.updateDownload(id, {
+          "progress": parseFloat(pctMatchSimple[1])
+        });
+      return;
     }
-
     if (line.indexOf("ERROR") !== -1) {
-      root.updateDownload(id, { error: line.replace(/^ERROR:\s*/, "") })
+      root.updateDownload(id, {
+          "error": line.replace(/^ERROR:\s*/, "")
+        });
     }
   }
 
@@ -903,13 +946,15 @@ Item {
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
-        var title = String(this.text || "").trim()
+        var title = String(this.text || "").trim();
         if (title && titleProc.targetId !== -1 && titleProc.targetId === titleProc._fetchId) {
-          root.updateDownload(titleProc.targetId, { title: title })
+          root.updateDownload(titleProc.targetId, {
+              "title": title
+            });
         }
-        titleProc.targetId = -1
-        titleProc._fetchId = -1
-        Qt.callLater(root._pumpTitle)
+        titleProc.targetId = -1;
+        titleProc._fetchId = -1;
+        Qt.callLater(root._pumpTitle);
       }
     }
   }
@@ -919,26 +964,32 @@ Item {
   // title (playlist items, or one applied by a previous fetch or the
   // Destination line).
   function _fetchTitle(id, url) {
-    if (id === -1 || !url) return
+    if (id === -1 || !url)
+      return;
     for (var i = 0; i < downloads.length; i++) {
-      var d = downloads[i]
+      var d = downloads[i];
       if (d.dwnId === id && d.title && d.title !== d.url && d.title !== root.extractVideoId(d.url))
-        return
+        return;
     }
     for (var j = 0; j < _titleQueue.length; j++) {
-      if (_titleQueue[j].id === id) return
+      if (_titleQueue[j].id === id)
+        return;
     }
-    _titleQueue.push({ id: id, url: url })
-    root._pumpTitle()
+    _titleQueue.push({
+        "id": id,
+        "url": url
+      });
+    root._pumpTitle();
   }
 
   function _pumpTitle() {
-    if (titleProc.running || _titleQueue.length === 0) return
-    var item = _titleQueue.shift()
-    titleProc.targetId = item.id
-    titleProc._fetchId = item.id
-    titleProc.command = [scriptPath, "title", item.url, cookiesBrowser, extraArgs]
-    titleProc.running = true
+    if (titleProc.running || _titleQueue.length === 0)
+      return;
+    var item = _titleQueue.shift();
+    titleProc.targetId = item.id;
+    titleProc._fetchId = item.id;
+    titleProc.command = [scriptPath, "title", item.url, cookiesBrowser, extraArgs];
+    titleProc.running = true;
   }
 
   // Playlist metadata fetch for the "Playlist detected" panel preview. The
@@ -949,23 +1000,25 @@ Item {
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
-        if (playlistInfoProc._req !== root._playlistInfoReq) return
-        var parts = String(this.text || "").trim().split("\t")
+        if (playlistInfoProc._req !== root._playlistInfoReq)
+          return;
+        var parts = String(this.text || "").trim().split("\t");
         if (parts.length >= 2 && parts[0]) {
-          root.playlistInfoName = parts[0]
-          root.playlistInfoCount = parseInt(parts[1], 10) || 0
-          root.playlistInfoError = false
+          root.playlistInfoName = parts[0];
+          root.playlistInfoCount = parseInt(parts[1], 10) || 0;
+          root.playlistInfoError = false;
         } else {
-          root.playlistInfoError = true
+          root.playlistInfoError = true;
         }
-        root.playlistInfoLoading = false
+        root.playlistInfoLoading = false;
       }
     }
-    onExited: function(exitCode) {
-      if (playlistInfoProc._req !== root._playlistInfoReq) return
+    onExited: function (exitCode) {
+      if (playlistInfoProc._req !== root._playlistInfoReq)
+        return;
       if (exitCode !== 0) {
-        root.playlistInfoError = true
-        root.playlistInfoLoading = false
+        root.playlistInfoError = true;
+        root.playlistInfoLoading = false;
       }
     }
   }
@@ -979,56 +1032,63 @@ Item {
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
-        var id = playlistProc.downloadId
-        playlistProc.downloadId = -1
-        if (id === -1) return
-        var items = []
-        var text = String(this.text || "").trim()
+        var id = playlistProc.downloadId;
+        playlistProc.downloadId = -1;
+        if (id === -1)
+          return;
+        var items = [];
+        var text = String(this.text || "").trim();
         if (text) {
           try {
-            var parsed = JSON.parse(text)
+            var parsed = JSON.parse(text);
             if (Array.isArray(parsed)) {
               for (var i = 0; i < parsed.length; i++) {
-                var it = parsed[i] || {}
+                var it = parsed[i] || {};
                 if (it.url) {
-                  items.push({ url: it.url, title: it.title || "", quality: root._playlistQuality, playlistTitle: it.playlistTitle || "" })
+                  items.push({
+                      "url": it.url,
+                      "title": it.title || "",
+                      "quality": root._playlistQuality,
+                      "playlistTitle": it.playlistTitle || ""
+                    });
                 }
               }
             }
-          } catch (e) { /* malformed enumeration output, treat as empty */ }
+          } catch (e) {
+          }
         }
         if (items.length === 0) {
           // Resolution failed; surface the error on the placeholder entry.
-          var err = root._playlistError || "Could not resolve playlist"
+          var err = root._playlistError || "Could not resolve playlist";
           for (var j = 0; j < root.downloads.length; j++) {
-            var d = root.downloads[j]
+            var d = root.downloads[j];
             if (d.dwnId === id) {
-              d.status = "error"
-              d.error = err
-              root.downloads = root.removeById(root.downloads, id)
+              d.status = "error";
+              d.error = err;
+              root.downloads = root.removeById(root.downloads, id);
               if (root.enableHistory) {
-                root.history = [d].concat(root.history)
-                root.persistHistory()
+                root.history = [d].concat(root.history);
+                root.persistHistory();
               }
-              root.historyUpdated()
-              root.downloadsUpdated()
-              break
+              root.historyUpdated();
+              root.downloadsUpdated();
+              break;
             }
           }
         } else {
-          root.downloads = root.removeById(root.downloads, id)
-          root.downloadsUpdated()
-          var playlistName = items.length > 0 && items[0].playlistTitle ? items[0].playlistTitle : ""
+          root.downloads = root.removeById(root.downloads, id);
+          root.downloadsUpdated();
+          var playlistName = items.length > 0 && items[0].playlistTitle ? items[0].playlistTitle : "";
           for (var k = 0; k < items.length; k++)
-            root.startDownload(items[k].url, items[k].quality, true, items[k].title, root._playlistDownloadType, playlistName)
+            root.startDownload(items[k].url, items[k].quality, true, items[k].title, root._playlistDownloadType, playlistName);
         }
       }
     }
     stderr: SplitParser {
-      onRead: function(line) {
-        playlistProc._errBuf += line + "\n"
+      onRead: function (line) {
+        playlistProc._errBuf += line + "\n";
         if (line.indexOf("ERROR") !== -1)
-          root._playlistError = line.replace(/^ERROR:\s*/, "")
+          root._playlistError = line.replace(/^ERROR:\s*/, "");
       }
     }
   }
@@ -1040,24 +1100,34 @@ Item {
     property string _errBuf: ""
     property bool _draining: false
     property string _url: ""
-    stdout: SplitParser { onRead: function(line) { root.parseLine(dlProc0, line) } }
-    stderr: SplitParser { onRead: function(line) { dlProc0._errBuf += line + "\n" } }
-    onExited: function(exitCode) {
+    stdout: SplitParser {
+      onRead: function (line) {
+        root.parseLine(dlProc0, line);
+      }
+    }
+    stderr: SplitParser {
+      onRead: function (line) {
+        dlProc0._errBuf += line + "\n";
+      }
+    }
+    onExited: function (exitCode) {
       if (exitCode !== 0 && dlProc0._errBuf) {
-        var errLines = String(dlProc0._errBuf).split("\n")
+        var errLines = String(dlProc0._errBuf).split("\n");
         for (var i = 0; i < errLines.length; i++) {
           if (errLines[i].indexOf("ERROR") !== -1) {
-            root.updateDownload(downloadId, { error: errLines[i].replace(/^ERROR:\s*/, "") })
-            break
+            root.updateDownload(downloadId, {
+                "error": errLines[i].replace(/^ERROR:\s*/, "")
+              });
+            break;
           }
         }
       }
-      root.onDownloadComplete(downloadId, exitCode)
-      downloadId = -1
-      dlProc0._url = ""
-      dlProc0._draining = false
+      root.onDownloadComplete(downloadId, exitCode);
+      downloadId = -1;
+      dlProc0._url = "";
+      dlProc0._draining = false;
       // The process really exited now, so a queued download can take its slot.
-      Qt.callLater(root._startNextQueued)
+      Qt.callLater(root._startNextQueued);
     }
   }
 
@@ -1068,23 +1138,33 @@ Item {
     property string _errBuf: ""
     property bool _draining: false
     property string _url: ""
-    stdout: SplitParser { onRead: function(line) { root.parseLine(dlProc1, line) } }
-    stderr: SplitParser { onRead: function(line) { dlProc1._errBuf += line + "\n" } }
-    onExited: function(exitCode) {
+    stdout: SplitParser {
+      onRead: function (line) {
+        root.parseLine(dlProc1, line);
+      }
+    }
+    stderr: SplitParser {
+      onRead: function (line) {
+        dlProc1._errBuf += line + "\n";
+      }
+    }
+    onExited: function (exitCode) {
       if (exitCode !== 0 && dlProc1._errBuf) {
-        var errLines = String(dlProc1._errBuf).split("\n")
+        var errLines = String(dlProc1._errBuf).split("\n");
         for (var i = 0; i < errLines.length; i++) {
           if (errLines[i].indexOf("ERROR") !== -1) {
-            root.updateDownload(downloadId, { error: errLines[i].replace(/^ERROR:\s*/, "") })
-            break
+            root.updateDownload(downloadId, {
+                "error": errLines[i].replace(/^ERROR:\s*/, "")
+              });
+            break;
           }
         }
       }
-      root.onDownloadComplete(downloadId, exitCode)
-      downloadId = -1
-      dlProc1._url = ""
-      dlProc1._draining = false
-      Qt.callLater(root._startNextQueued)
+      root.onDownloadComplete(downloadId, exitCode);
+      downloadId = -1;
+      dlProc1._url = "";
+      dlProc1._draining = false;
+      Qt.callLater(root._startNextQueued);
     }
   }
 
@@ -1095,23 +1175,33 @@ Item {
     property string _errBuf: ""
     property bool _draining: false
     property string _url: ""
-    stdout: SplitParser { onRead: function(line) { root.parseLine(dlProc2, line) } }
-    stderr: SplitParser { onRead: function(line) { dlProc2._errBuf += line + "\n" } }
-    onExited: function(exitCode) {
+    stdout: SplitParser {
+      onRead: function (line) {
+        root.parseLine(dlProc2, line);
+      }
+    }
+    stderr: SplitParser {
+      onRead: function (line) {
+        dlProc2._errBuf += line + "\n";
+      }
+    }
+    onExited: function (exitCode) {
       if (exitCode !== 0 && dlProc2._errBuf) {
-        var errLines = String(dlProc2._errBuf).split("\n")
+        var errLines = String(dlProc2._errBuf).split("\n");
         for (var i = 0; i < errLines.length; i++) {
           if (errLines[i].indexOf("ERROR") !== -1) {
-            root.updateDownload(downloadId, { error: errLines[i].replace(/^ERROR:\s*/, "") })
-            break
+            root.updateDownload(downloadId, {
+                "error": errLines[i].replace(/^ERROR:\s*/, "")
+              });
+            break;
           }
         }
       }
-      root.onDownloadComplete(downloadId, exitCode)
-      downloadId = -1
-      dlProc2._url = ""
-      dlProc2._draining = false
-      Qt.callLater(root._startNextQueued)
+      root.onDownloadComplete(downloadId, exitCode);
+      downloadId = -1;
+      dlProc2._url = "";
+      dlProc2._draining = false;
+      Qt.callLater(root._startNextQueued);
     }
   }
 
@@ -1129,51 +1219,57 @@ Item {
   property string _clipboardBuf: ""
 
   function checkClipboard(callback) {
-    if (clipboardProc.running) return
-    root._clipboardBuf = ""
-    root._clipboardCallback = callback
-    clipboardProc.running = true
+    if (clipboardProc.running)
+      return;
+    root._clipboardBuf = "";
+    root._clipboardCallback = callback;
+    clipboardProc.running = true;
   }
 
   Process {
     id: clipboardProc
     command: ["wl-paste", "--no-newline"]
     stdout: SplitParser {
-      onRead: function(data) { root._clipboardBuf += data }
+      onRead: function (data) {
+        root._clipboardBuf += data;
+      }
     }
-    onExited: function(exitCode) {
-      var cb = root._clipboardCallback
-      root._clipboardCallback = null
+    onExited: function (exitCode) {
+      var cb = root._clipboardCallback;
+      root._clipboardCallback = null;
       if (exitCode !== 0) {
-        if (cb) cb("")
-        return
+        if (cb)
+          cb("");
+        return;
       }
-      var content = String(root._clipboardBuf || "").trim()
-      root._clipboardBuf = ""
-      var url = ""
+      var content = String(root._clipboardBuf || "").trim();
+      root._clipboardBuf = "";
+      var url = "";
       if (root.isYouTubeUrl(content)) {
-        var cleaned = content.match(/(https?:\/\/[^\s]+)/)
-        if (cleaned) url = cleaned[1]
+        var cleaned = content.match(/(https?:\/\/[^\s]+)/);
+        if (cleaned)
+          url = cleaned[1];
       }
-      root.clipboardUrl = url
-      if (cb) cb(url)
+      root.clipboardUrl = url;
+      if (cb)
+        cb(url);
     }
   }
 
   // MPRIS auto-detection: reads currently playing YouTube from any browser.
-
   function detectYouTube() {
-    if (detectProc.running) return
-    root.detectedUrl = ""
-    root.detectedTitle = ""
-    root.detecting = true
-    detectProc.command = ["bash", detectScriptPath]
-    detectProc.running = true
+    if (detectProc.running)
+      return;
+    root.detectedUrl = "";
+    root.detectedTitle = "";
+    root.detecting = true;
+    detectProc.command = ["bash", detectScriptPath];
+    detectProc.running = true;
   }
 
   function clearDetection() {
-    root.detectedUrl = ""
-    root.detectedTitle = ""
+    root.detectedUrl = "";
+    root.detectedTitle = "";
   }
 
   Process {
@@ -1181,51 +1277,54 @@ Item {
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
-        root.detecting = false
-        var text = String(this.text || "").trim()
-        if (!text) return
-        var lines = text.split("\n")
+        root.detecting = false;
+        var text = String(this.text || "").trim();
+        if (!text)
+          return;
+        var lines = text.split("\n");
         for (var i = 0; i < lines.length; i++) {
           try {
-            var obj = JSON.parse(lines[i])
+            var obj = JSON.parse(lines[i]);
             if (obj.url && root.isYouTubeUrl(obj.url) && !root.isUrlBusy(obj.url)) {
-              root.detectedUrl = obj.url
-              root.detectedTitle = obj.title || ""
-              return
+              root.detectedUrl = obj.url;
+              root.detectedTitle = obj.title || "";
+              return;
             }
-          } catch (e) {}
+          } catch (e) {
+          }
         }
       }
     }
     stderr: SplitParser {
-      onRead: function(line) {}
+      onRead: function (line) {}
     }
   }
 
   function checkInstallation() {
-    if (whichProc.running) return
-    root.checkingInstallation = true
-    whichProc.command = [scriptPath, "check"]
-    whichProc.running = true
+    if (whichProc.running)
+      return;
+    root.checkingInstallation = true;
+    whichProc.command = [scriptPath, "check"];
+    whichProc.running = true;
   }
 
   function installInTerminal() {
-    root.installing = true
-    var cmd = "omarchy pkg add yt-dlp"
-    Quickshell.execDetached(["omarchy", "launch", "floating", "terminal", "with", "presentation", cmd])
-    installPoll.restart()
-    installTimeout.restart()
+    root.installing = true;
+    var cmd = "omarchy pkg add yt-dlp";
+    Quickshell.execDetached(["omarchy", "launch", "floating", "terminal", "with", "presentation", cmd]);
+    installPoll.restart();
+    installTimeout.restart();
   }
 
   Process {
     id: whichProc
-    onExited: function(exitCode) {
-      root.checkingInstallation = false
-      root.installed = (exitCode === 0)
+    onExited: function (exitCode) {
+      root.checkingInstallation = false;
+      root.installed = (exitCode === 0);
       if (root.installed) {
-        root.installing = false
-        installPoll.stop()
-        installTimeout.stop()
+        root.installing = false;
+        installPoll.stop();
+        installTimeout.stop();
       }
     }
   }
@@ -1242,49 +1341,66 @@ Item {
     id: installTimeout
     interval: 300000
     onTriggered: {
-      if (!root.installing) return
-      root.installing = false
-      installPoll.stop()
+      if (!root.installing)
+        return;
+      root.installing = false;
+      installPoll.stop();
     }
   }
 
   IpcHandler {
     target: "ytdl"
-    function start(url: string): void { root.startDownload(url) }
-    function startWith(url: string, downloadType: string): void {
-      root.startDownload(url, root.selectedQuality, false, "", downloadType)
+    function start(url: string): void {
+      root.startDownload(url);
     }
-    function cancel(id: string): void { root.cancelDownload(parseInt(id)) }
-    function status(): string { return JSON.stringify({downloads: root.downloadCount, active: root.activeCount, queued: root.queuedCount}) }
-    function cancelAll(): void { root.cancelAll(); root.clearQueue() }
+    function startWith(url: string, downloadType: string): void {
+      root.startDownload(url, root.selectedQuality, false, "", downloadType);
+    }
+    function cancel(id: string): void {
+      root.cancelDownload(parseInt(id));
+    }
+    function status(): string {
+      return JSON.stringify({
+          "downloads": root.downloadCount,
+          "active": root.activeCount,
+          "queued": root.queuedCount
+        });
+    }
+    function cancelAll(): void {
+      root.cancelAll();
+      root.clearQueue();
+    }
     function autoDownload(): string {
-      Quickshell.execDetached([autoDownloadScriptPath])
-      return JSON.stringify({status: "started", message: "Auto-download triggered"})
+      Quickshell.execDetached([autoDownloadScriptPath]);
+      return JSON.stringify({
+          "status": "started",
+          "message": "Auto-download triggered"
+        });
     }
     function open(): string {
-      root.openPanelRequested()
-      return "ok"
+      root.openPanelRequested();
+      return "ok";
     }
     function openSettings(): string {
-      root.openSettingsRequested(true)
-      return "ok"
+      root.openSettingsRequested(true);
+      return "ok";
     }
     function closeSettings(): string {
-      root.openSettingsRequested(false)
-      return "ok"
+      root.openSettingsRequested(false);
+      return "ok";
     }
     function settings(): string {
       return JSON.stringify({
-        defaultDownloadType: root.defaultDownloadType,
-        quality: root.selectedQuality,
-        downloadTranscripts: root.downloadTranscripts,
-        transcriptLanguages: root.transcriptLanguages,
-        playlistInSeparateFolder: root.playlistInSeparateFolder,
-        downloadLocation: root.downloadLocation,
-        cookiesBrowser: root.cookiesBrowser,
-        extraArgs: root.extraArgs,
-        enableHistory: root.enableHistory
-      })
+          "defaultDownloadType": root.defaultDownloadType,
+          "quality": root.selectedQuality,
+          "downloadTranscripts": root.downloadTranscripts,
+          "transcriptLanguages": root.transcriptLanguages,
+          "playlistInSeparateFolder": root.playlistInSeparateFolder,
+          "downloadLocation": root.downloadLocation,
+          "cookiesBrowser": root.cookiesBrowser,
+          "extraArgs": root.extraArgs,
+          "enableHistory": root.enableHistory
+        });
     }
 
     // Set one setting over IPC and persist it to shell.json. Values arrive as
@@ -1293,31 +1409,57 @@ Item {
     // verify in one round-trip.
     function set(key: string, value: string): string {
       var enums = {
-        defaultDownloadType: ["video", "audio", "both"],
-        selectedQuality: ["best", "1080p", "720p", "480p"],
-        defaultQuality: ["best", "1080p", "720p", "480p"],
-        cookiesBrowser: ["none", "firefox", "chromium", "chrome", "zen", "helium", "glide"]
-      }
-      var bools = ["downloadTranscripts", "playlistInSeparateFolder", "enableHistory"]
+        "defaultDownloadType": ["video", "audio", "both"],
+        "selectedQuality": ["best", "1080p", "720p", "480p"],
+        "defaultQuality": ["best", "1080p", "720p", "480p"],
+        "cookiesBrowser": ["none", "firefox", "chromium", "chrome", "zen", "helium", "glide"]
+      };
+      var bools = ["downloadTranscripts", "playlistInSeparateFolder", "enableHistory"];
       if (enums[key] !== undefined && enums[key].indexOf(String(value)) === -1)
-        return JSON.stringify({error: "invalid value for " + key + " (expected one of: " + enums[key].join(", ") + ")"})
+        return JSON.stringify({
+            "error": "invalid value for " + key + " (expected one of: " + enums[key].join(", ") + ")"
+          });
       if (bools.indexOf(key) !== -1)
-        value = (value === "true" || value === "1" || value === "yes") ? "true" : "false"
+        value = (value === "true" || value === "1" || value === "yes") ? "true" : "false";
       // defaultQuality is the persisted alias of the live selection.
-      if (key === "defaultQuality") key = "selectedQuality"
+      if (key === "defaultQuality")
+        key = "selectedQuality";
       if (!root.hasOwnProperty(key))
-        return JSON.stringify({error: "unknown key: " + key})
-      root.updateSetting(key, bools.indexOf(key) !== -1 ? (value === "true") : String(value))
-      return this.settings()
+        return JSON.stringify({
+            "error": "unknown key: " + key
+          });
+      root.updateSetting(key, bools.indexOf(key) !== -1 ? (value === "true") : String(value));
+      return this.settings();
     }
     function state(): string {
-      var d = root.downloads.map(function(x) {
-        return { id: x.dwnId, url: x.url, title: x.displayTitle, type: x._downloadType, status: x.status, progress: x.progress, speed: x.speed, eta: x.eta, filepath: x.filepath }
-      })
-      var h = root.history.map(function(x) {
-        return { id: x.dwnId, url: x.url, title: x.displayTitle, type: x._downloadType, status: x.status, filepath: x.filepath, error: x.error }
-      })
-      return JSON.stringify({ downloads: d, history: h })
+      var d = root.downloads.map(function (x) {
+          return {
+            "id": x.dwnId,
+            "url": x.url,
+            "title": x.displayTitle,
+            "type": x._downloadType,
+            "status": x.status,
+            "progress": x.progress,
+            "speed": x.speed,
+            "eta": x.eta,
+            "filepath": x.filepath
+          };
+        });
+      var h = root.history.map(function (x) {
+          return {
+            "id": x.dwnId,
+            "url": x.url,
+            "title": x.displayTitle,
+            "type": x._downloadType,
+            "status": x.status,
+            "filepath": x.filepath,
+            "error": x.error
+          };
+        });
+      return JSON.stringify({
+          "downloads": d,
+          "history": h
+        });
     }
   }
 

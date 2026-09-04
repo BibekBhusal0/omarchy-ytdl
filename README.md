@@ -1,8 +1,10 @@
-# Omarchy Shell Plugin for yt-dlp
+# YouTube Video Downloader for Omarchy
 
 A YouTube video downloader for the Omarchy bar.
 
 https://github.com/user-attachments/assets/8a63333c-689c-4793-9ed7-804d2df5b888
+
+![Youtube Video Downloader preview](preview.png)
 
 ## Features
 
@@ -79,19 +81,20 @@ Options can be customized via the interactive settings panel (click the button d
 }
 ```
 
-| Setting            | Default              | Options                                                           |
-| ------------------ | -------------------- | ----------------------------------------------------------------- |
-| `downloadLocation` | `~/Downloads/yt-dlp` | Any directory path                                                |
-| `defaultQuality`      | `1080p`              | `best`, `1080p`, `720p`, `480p`                                   |
-| `defaultDownloadType` | `video`              | `video`, `audio`, `both`                                          |
-| `playlistInSeparateFolder` | `true`           | `true`, `false`                                                   |
-| `cookiesBrowser`      | `none`               | `none`, `firefox`, `chromium`, `chrome`, `zen`, `helium`, `glide` |
-| `extraArgs`        | (empty)              | Any yt-dlp flags, e.g. `--cookies-from-browser chromium`          |
-| `enableHistory`       | `true`               | `true`, `false`                                                   |
-| `downloadTranscripts` | `false`              | `true`, `false`                                                   |
-| `transcriptLanguages` | `en`                 | Comma-separated codes (e.g., en,es,fr) or 'all'                   |
+| Setting                    | Default              | Options                                                           |
+| -------------------------- | -------------------- | ----------------------------------------------------------------- |
+| `downloadLocation`         | `~/Downloads/yt-dlp` | Any directory path                                                |
+| `defaultQuality`           | `1080p`              | `best`, `1080p`, `720p`, `480p`                                   |
+| `defaultDownloadType`      | `video`              | `video`, `audio`, `both`                                          |
+| `playlistInSeparateFolder` | `true`               | `true`, `false`                                                   |
+| `cookiesBrowser`           | `none`               | `none`, `firefox`, `chromium`, `chrome`, `zen`, `helium`, `glide` |
+| `extraArgs`                | (empty)              | Any yt-dlp flags, e.g. `--cookies-from-browser chromium`          |
+| `enableHistory`            | `true`               | `true`, `false`                                                   |
+| `downloadTranscripts`      | `false`              | `true`, `false`                                                   |
+| `transcriptLanguages`      | `en`                 | Comma-separated codes (e.g., en,es,fr) or 'all'                   |
 
 ### Download Types
+
 - **Video**: Downloads video and audio combined.
 - **Audio**: Downloads only audio.
 - **Video & Audio (Both)**: Downloads video and audio separately for better quality/compatibility and splits them into two separate list items in the panel. If transcripts are enabled, they are also downloaded as a third separate item.

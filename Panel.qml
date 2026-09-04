@@ -45,20 +45,24 @@ Panel {
   readonly property bool detectedSectionVisible: ytdlService && ytdlService.detectedUrl !== ""
   readonly property bool hasRetryableItems: {
     for (var i = 0; i < root.historyItems.length; i++) {
-      if (root.historyItems[i].status === "error" || root.historyItems[i].status === "cancelled") return true
+      if (root.historyItems[i].status === "error" || root.historyItems[i].status === "cancelled")
+        return true;
     }
-    return false
+    return false;
   }
 
   // Shown on the settings button instead of a bare gear icon so the current
   // quality/format choice is visible at a glance.
   readonly property string selectionSummary: {
-    if (!ytdlService) return ""
-    var t = ytdlService.defaultDownloadType
-    var q = ytdlService.selectedQuality
-    if (t === "audio") return "Audio"
-    if (t === "both") return q + " · Audio"
-    return q
+    if (!ytdlService)
+      return "";
+    var t = ytdlService.defaultDownloadType;
+    var q = ytdlService.selectedQuality;
+    if (t === "audio")
+      return "Audio";
+    if (t === "both")
+      return q + " · Audio";
+    return q;
   }
 
   property bool _serviceWired: false
@@ -66,280 +70,332 @@ Panel {
   // The bar widget injects ytdlService after both components load, so IPC
   // requests reach the panel through these service signals.
   function wireService() {
-    if (root._serviceWired || !ytdlService) return
-    root._serviceWired = true
-    ytdlService.openPanelRequested.connect(function() {
-      if (!root.opened) root.open()
-    })
-    ytdlService.openSettingsRequested.connect(function(openIt) {
-      if (!root.opened) root.open()
-      if (openIt && !root.settingsPanelVisible) root.openSettings()
-      else if (!openIt && root.settingsPanelVisible) root.closeSettings()
-    })
+    if (root._serviceWired || !ytdlService)
+      return;
+    root._serviceWired = true;
+    ytdlService.openPanelRequested.connect(function () {
+        if (!root.opened)
+          root.open();
+      });
+    ytdlService.openSettingsRequested.connect(function (openIt) {
+        if (!root.opened)
+          root.open();
+        if (openIt && !root.settingsPanelVisible)
+          root.openSettings();
+        else if (!openIt && root.settingsPanelVisible)
+          root.closeSettings();
+      });
   }
 
   onInputUrlChanged: {
     if (inputUrl && urlInput.text !== inputUrl)
-      urlInput.text = inputUrl
+      urlInput.text = inputUrl;
   }
 
   onOpenedChanged: {
     if (root.opened) {
       root.settingsPanelVisible = false;
-      if (ytdlService) ytdlService.pruneMissing();
+      if (ytdlService)
+        ytdlService.pruneMissing();
     }
   }
 
   function filterActive(list) {
-    var r = []
+    var r = [];
     for (var i = 0; i < list.length; i++)
       if (list[i].status === "downloading")
-        r.push(list[i])
-    return r
+        r.push(list[i]);
+    return r;
   }
 
   function filterQueued(list) {
-    var r = []
+    var r = [];
     for (var i = 0; i < list.length; i++)
       if (list[i].status === "queued")
-        r.push(list[i])
-    return r
+        r.push(list[i]);
+    return r;
   }
 
   function open() {
-    root.focusSection = "input"
-    root.selectedIndex = 0
-    root.cursorActive = false
-    root.settingsPanelVisible = false
-    controller.show()
+    root.focusSection = "input";
+    root.selectedIndex = 0;
+    root.cursorActive = false;
+    root.settingsPanelVisible = false;
+    controller.show();
     if (ytdlService) {
-      ytdlService.checkInstallation()
-      root.pasteClipboard()
-      ytdlService.detectYouTube()
+      ytdlService.checkInstallation();
+      root.pasteClipboard();
+      ytdlService.detectYouTube();
     }
   }
 
   function close() {
-    root.hoverSection = ""
-    root.hoverIndex = -1
-    controller.hide()
+    root.hoverSection = "";
+    root.hoverIndex = -1;
+    controller.hide();
   }
 
   // Handle panel toggle: when the widget on the bar is clicked, it opens/closes.
   function toggle() {
-    if (opened) close()
-    else open()
+    if (opened)
+      close();
+    else
+      open();
   }
 
   function switchPanel(direction) {
     if (bar && typeof bar.switchPanelFrom === "function")
-      return bar.switchPanelFrom(barIdentity, direction)
-    return false
+      return bar.switchPanelFrom(barIdentity, direction);
+    return false;
   }
 
   function pasteClipboard() {
-    if (!ytdlService) return
-    ytdlService.checkClipboard(function(url) {
-      if (!url || ytdlService.isUrlBusy(url)) {
-        root.clipboardUrl = ""
-        return
-      }
-      root.clipboardUrl = url
-      root.inputUrl = url
-      if (urlInput.text !== url) urlInput.text = url
-    })
+    if (!ytdlService)
+      return;
+    ytdlService.checkClipboard(function (url) {
+        if (!url || ytdlService.isUrlBusy(url)) {
+          root.clipboardUrl = "";
+          return;
+        }
+        root.clipboardUrl = url;
+        root.inputUrl = url;
+        if (urlInput.text !== url)
+          urlInput.text = url;
+      });
   }
 
   function submitUrl() {
-    if (!ytdlService || !inputUrl) return
-    ytdlService.startDownload(inputUrl, ytdlService.selectedQuality, false, "", ytdlService.defaultDownloadType)
-    inputUrl = ""
-    urlInput.text = ""
+    if (!ytdlService || !inputUrl)
+      return;
+    ytdlService.startDownload(inputUrl, ytdlService.selectedQuality, false, "", ytdlService.defaultDownloadType);
+    inputUrl = "";
+    urlInput.text = "";
   }
 
   function openSettings() {
-    root.settingsPanelVisible = true
-    root.focusSection = "settings"
-    root.selectedIndex = 0
-    root.cursorActive = true
+    root.settingsPanelVisible = true;
+    root.focusSection = "settings";
+    root.selectedIndex = 0;
+    root.cursorActive = true;
   }
 
   function closeSettings() {
-    root.settingsPanelVisible = false
-    root.focusSection = "input"
-    root.selectedIndex = 1
-    root.cursorActive = true
+    root.settingsPanelVisible = false;
+    root.focusSection = "input";
+    root.selectedIndex = 1;
+    root.cursorActive = true;
   }
 
   function focusUrlField() {
-    if (root.settingsPanelVisible) return
-    root.focusSection = "input"
-    root.selectedIndex = 0
-    root.cursorActive = true
-    if (urlInput) urlInput.forceActiveFocus()
+    if (root.settingsPanelVisible)
+      return;
+    root.focusSection = "input";
+    root.selectedIndex = 0;
+    root.cursorActive = true;
+    if (urlInput)
+      urlInput.forceActiveFocus();
   }
 
   // Returns focus from text field to the main key catcher.
   function focusPanel() {
-    keyCatcher.forceActiveFocus()
-    if (urlInput) urlInput.focus = false
+    keyCatcher.forceActiveFocus();
+    if (urlInput)
+      urlInput.focus = false;
   }
 
   function sectionList() {
     if (root.settingsPanelVisible) {
-      return ["settings"]
+      return ["settings"];
     }
-    var s = []
-    if (!root.installed && !(ytdlService && ytdlService.checkingInstallation)) s.push("install")
-    if (root.installed) s.push("input")
-    if (root.installed && root.detectedSectionVisible) s.push("detected")
-    if (root.installed && root.playlistSectionVisible) s.push("playlist")
-    if (root.installed && root.activeCount > 0) s.push("downloads")
-    if (root.installed && root.queuedCount > 0) s.push("queue")
-    if (root.installed && root.historyCount > 0) s.push("history")
-    return s
+    var s = [];
+    if (!root.installed && !(ytdlService && ytdlService.checkingInstallation))
+      s.push("install");
+    if (root.installed)
+      s.push("input");
+    if (root.installed && root.detectedSectionVisible)
+      s.push("detected");
+    if (root.installed && root.playlistSectionVisible)
+      s.push("playlist");
+    if (root.installed && root.activeCount > 0)
+      s.push("downloads");
+    if (root.installed && root.queuedCount > 0)
+      s.push("queue");
+    if (root.installed && root.historyCount > 0)
+      s.push("history");
+    return s;
   }
 
   function sectionCount(name) {
     if (name === "settings") {
-      return settingsPanelLoader.item ? settingsPanelLoader.item.visibleItems.length : 0
+      return settingsPanelLoader.item ? settingsPanelLoader.item.visibleItems.length : 0;
     }
-    if (name === "install") return 1
-    if (name === "input") return 3
-    if (name === "detected") return 1
-    if (name === "playlist") return 1
-    if (name === "downloads") return root.activeCount + (root.activeCount > 0 ? 1 : 0)
-    if (name === "queue") return root.queuedCount + (root.queuedCount > 0 ? 1 : 0)
-    if (name === "history") return root.historyCount + (root.historyCount > 0 ? 1 : 0)
-    return 0
+    if (name === "install")
+      return 1;
+    if (name === "input")
+      return 3;
+    if (name === "detected")
+      return 1;
+    if (name === "playlist")
+      return 1;
+    if (name === "downloads")
+      return root.activeCount + (root.activeCount > 0 ? 1 : 0);
+    if (name === "queue")
+      return root.queuedCount + (root.queuedCount > 0 ? 1 : 0);
+    if (name === "history")
+      return root.historyCount + (root.historyCount > 0 ? 1 : 0);
+    return 0;
   }
 
   function clampIndex() {
-    var max = sectionCount(root.focusSection) - 1
-    if (root.selectedIndex > max) root.selectedIndex = Math.max(0, max)
-    if (root.selectedIndex < 0) root.selectedIndex = 0
+    var max = sectionCount(root.focusSection) - 1;
+    if (root.selectedIndex > max)
+      root.selectedIndex = Math.max(0, max);
+    if (root.selectedIndex < 0)
+      root.selectedIndex = 0;
   }
 
   function focusSectionAt(name, index) {
-    if (root.settingsPanelVisible && name !== "settings") return
-    root.focusSection = name
-    root.selectedIndex = index
-    root.cursorActive = true
-    root.clampIndex()
-    Qt.callLater(root.scrollToCursor)
+    if (root.settingsPanelVisible && name !== "settings")
+      return;
+    root.focusSection = name;
+    root.selectedIndex = index;
+    root.cursorActive = true;
+    root.clampIndex();
+    Qt.callLater(root.scrollToCursor);
   }
 
   function moveCursor(dx, dy) {
     if (!root.cursorActive) {
-      root.cursorActive = true
-      root.clampIndex()
-      return
+      root.cursorActive = true;
+      root.clampIndex();
+      return;
     }
     if (dy !== 0 || dx !== 0) {
-      var direction = dy !== 0 ? dy : dx
-      var count = sectionCount(root.focusSection)
-      var ni = root.selectedIndex + direction
+      var direction = dy !== 0 ? dy : dx;
+      var count = sectionCount(root.focusSection);
+      var ni = root.selectedIndex + direction;
       if (ni >= count) {
-        var s = root.sectionList()
-        var i = s.indexOf(root.focusSection)
-        root.focusSection = s[(i + 1) % s.length]
-        root.selectedIndex = 0
-        root.clampIndex()
+        var s = root.sectionList();
+        var i = s.indexOf(root.focusSection);
+        root.focusSection = s[(i + 1) % s.length];
+        root.selectedIndex = 0;
+        root.clampIndex();
       } else if (ni < 0) {
-        var s2 = root.sectionList()
-        var i2 = s2.indexOf(root.focusSection)
-        root.focusSection = s2[(i2 - 1 + s2.length) % s2.length]
-        root.selectedIndex = sectionCount(root.focusSection) - 1
-        root.clampIndex()
+        var s2 = root.sectionList();
+        var i2 = s2.indexOf(root.focusSection);
+        root.focusSection = s2[(i2 - 1 + s2.length) % s2.length];
+        root.selectedIndex = sectionCount(root.focusSection) - 1;
+        root.clampIndex();
       } else {
-        root.selectedIndex = ni
+        root.selectedIndex = ni;
       }
-      Qt.callLater(root.scrollToCursor)
+      Qt.callLater(root.scrollToCursor);
     }
   }
 
   function activateCursor() {
     if (!root.cursorActive) {
-      root.cursorActive = true
-      return
+      root.cursorActive = true;
+      return;
     }
-    var s = root.focusSection
+    var s = root.focusSection;
     if (s === "settings") {
       if (settingsPanelLoader.item) {
-        settingsPanelLoader.item.activateIndex(root.selectedIndex)
+        settingsPanelLoader.item.activateIndex(root.selectedIndex);
       }
     } else if (s === "install") {
-      if (ytdlService && !ytdlService.installing) ytdlService.installInTerminal()
+      if (ytdlService && !ytdlService.installing)
+        ytdlService.installInTerminal();
     } else if (s === "input") {
-      if (root.selectedIndex === 0) root.focusUrlField()
-      else if (root.selectedIndex === 1) root.openSettings()
-      else root.submitUrl()
+      if (root.selectedIndex === 0)
+        root.focusUrlField();
+      else if (root.selectedIndex === 1)
+        root.openSettings();
+      else
+        root.submitUrl();
     } else if (s === "detected") {
       if (ytdlService && ytdlService.detectedUrl) {
-        ytdlService.startDownload(ytdlService.detectedUrl, ytdlService.selectedQuality, false, ytdlService.detectedTitle || "", ytdlService.defaultDownloadType)
-        ytdlService.clearDetection()
+        ytdlService.startDownload(ytdlService.detectedUrl, ytdlService.selectedQuality, false, ytdlService.detectedTitle || "", ytdlService.defaultDownloadType);
+        ytdlService.clearDetection();
       }
     } else if (s === "playlist") {
       if (ytdlService && ytdlService.playlistInfoUrl) {
-        ytdlService.startPlaylist(ytdlService.playlistInfoUrl, ytdlService.selectedQuality, ytdlService.defaultDownloadType)
-        ytdlService.clearPlaylistInfo()
+        ytdlService.startPlaylist(ytdlService.playlistInfoUrl, ytdlService.selectedQuality, ytdlService.defaultDownloadType);
+        ytdlService.clearPlaylistInfo();
       }
     } else if (s === "downloads") {
       if (root.selectedIndex === 0) {
-        if (ytdlService) ytdlService.cancelAll()
+        if (ytdlService)
+          ytdlService.cancelAll();
       } else {
-        var d = root.activeDownloads[root.selectedIndex - 1]
-        if (d && ytdlService) ytdlService.cancelDownload(d.dwnId)
+        var d = root.activeDownloads[root.selectedIndex - 1];
+        if (d && ytdlService)
+          ytdlService.cancelDownload(d.dwnId);
       }
     } else if (s === "queue") {
       if (root.selectedIndex === 0) {
-        if (ytdlService) ytdlService.clearQueue()
+        if (ytdlService)
+          ytdlService.clearQueue();
       } else {
-        var q = root.queuedDownloads[root.selectedIndex - 1]
-        if (q && ytdlService) ytdlService.removeQueued(q.dwnId)
+        var q = root.queuedDownloads[root.selectedIndex - 1];
+        if (q && ytdlService)
+          ytdlService.removeQueued(q.dwnId);
       }
     } else if (s === "history") {
       if (root.selectedIndex === 0) {
-        if (root.hasRetryableItems && ytdlService) ytdlService.retryAll()
-        else if (ytdlService) ytdlService.clearHistory()
+        if (root.hasRetryableItems && ytdlService)
+          ytdlService.retryAll();
+        else if (ytdlService)
+          ytdlService.clearHistory();
       } else {
-        var h = root.historyItems[root.selectedIndex - 1]
+        var h = root.historyItems[root.selectedIndex - 1];
         if (h && ytdlService) {
-          if (h.status === "done") ytdlService.playFile(h.filepath)
-          else if (h.status === "error" || h.status === "cancelled") ytdlService.retryDownload(h)
+          if (h.status === "done")
+            ytdlService.playFile(h.filepath);
+          else if (h.status === "error" || h.status === "cancelled")
+            ytdlService.retryDownload(h);
         }
       }
     }
   }
 
   function deleteCursor() {
-    if (!root.cursorActive) return
+    if (!root.cursorActive)
+      return;
     if (root.focusSection === "settings") {
-      root.closeSettings()
+      root.closeSettings();
     } else if (root.focusSection === "detected") {
-      if (ytdlService) ytdlService.clearDetection()
+      if (ytdlService)
+        ytdlService.clearDetection();
     } else if (root.focusSection === "playlist") {
-      if (ytdlService) ytdlService.clearPlaylistInfo()
+      if (ytdlService)
+        ytdlService.clearPlaylistInfo();
     } else if (root.focusSection === "downloads") {
       if (root.selectedIndex === 0) {
-        if (ytdlService) ytdlService.cancelAll()
+        if (ytdlService)
+          ytdlService.cancelAll();
       } else {
-        var d = root.activeDownloads[root.selectedIndex - 1]
-        if (d && ytdlService) ytdlService.cancelDownload(d.dwnId)
+        var d = root.activeDownloads[root.selectedIndex - 1];
+        if (d && ytdlService)
+          ytdlService.cancelDownload(d.dwnId);
       }
     } else if (root.focusSection === "queue") {
       if (root.selectedIndex === 0) {
-        if (ytdlService) ytdlService.clearQueue()
+        if (ytdlService)
+          ytdlService.clearQueue();
       } else {
-        var q = root.queuedDownloads[root.selectedIndex - 1]
-        if (q && ytdlService) ytdlService.removeQueued(q.dwnId)
+        var q = root.queuedDownloads[root.selectedIndex - 1];
+        if (q && ytdlService)
+          ytdlService.removeQueued(q.dwnId);
       }
     } else if (root.focusSection === "history") {
       if (root.selectedIndex === 0) {
-        if (ytdlService) ytdlService.clearHistory()
+        if (ytdlService)
+          ytdlService.clearHistory();
       } else {
-        var h = root.historyItems[root.selectedIndex - 1]
-        if (h && ytdlService) ytdlService.removeHistoryItem(h.dwnId)
+        var h = root.historyItems[root.selectedIndex - 1];
+        if (h && ytdlService)
+          ytdlService.removeHistoryItem(h.dwnId);
       }
     }
   }
@@ -347,88 +403,97 @@ Panel {
   function handleTextKey(t) {
     if (root.settingsPanelVisible) {
       if (t === "q" || t === "Q" || t === "Escape") {
-        root.closeSettings()
+        root.closeSettings();
       }
     } else {
-      if (t === "/") root.focusUrlField()
-      else if (t === "s" || t === "S") root.openSettings()
+      if (t === "/")
+        root.focusUrlField();
+      else if (t === "s" || t === "S")
+        root.openSettings();
     }
   }
 
   function scrollToCursor() {
     if (root.settingsPanelVisible) {
       if (settingsPanelLoader.item) {
-        settingsPanelLoader.item.scrollToCursor()
+        settingsPanelLoader.item.scrollToCursor();
       }
-      return
+      return;
     }
-    if (!flick) return
-    var item = null
+    if (!flick)
+      return;
+    var item = null;
     if (root.focusSection === "input") {
-      if (root.selectedIndex === 0 && urlInput) item = urlInput
-      else if (root.selectedIndex === 1 && settingsBtn) item = settingsBtn
-      else if (root.selectedIndex === 2 && downloadManualBtn) item = downloadManualBtn
+      if (root.selectedIndex === 0 && urlInput)
+        item = urlInput;
+      else if (root.selectedIndex === 1 && settingsBtn)
+        item = settingsBtn;
+      else if (root.selectedIndex === 2 && downloadManualBtn)
+        item = downloadManualBtn;
     } else if (root.focusSection === "detected")
-      item = flick.contentItem.parent.detectedColumn
+      item = flick.contentItem.parent.detectedColumn;
     else if (root.focusSection === "playlist")
-      item = flick.contentItem.parent.playlistColumn
+      item = flick.contentItem.parent.playlistColumn;
     else if (root.focusSection === "downloads" && root.selectedIndex > 0 && activeRepeater.count > 0)
-      item = activeRepeater.itemAt(root.selectedIndex - 1)
+      item = activeRepeater.itemAt(root.selectedIndex - 1);
     else if (root.focusSection === "queue" && root.selectedIndex > 0 && queueRepeater.count > 0)
-      item = queueRepeater.itemAt(root.selectedIndex - 1)
+      item = queueRepeater.itemAt(root.selectedIndex - 1);
     else if (root.focusSection === "history" && root.selectedIndex > 0 && historyRepeater.count > 0)
-      item = historyRepeater.itemAt(root.selectedIndex - 1)
-    if (!item) return
-    var y = item.mapToItem(flick.contentItem, 0, 0).y
-    if (y < flick.contentY) flick.contentY = Math.max(0, y - Style.space(8))
+      item = historyRepeater.itemAt(root.selectedIndex - 1);
+    if (!item)
+      return;
+    var y = item.mapToItem(flick.contentItem, 0, 0).y;
+    if (y < flick.contentY)
+      flick.contentY = Math.max(0, y - Style.space(8));
     else if (y + item.height > flick.contentY + flick.height)
-      flick.contentY = y + item.height - flick.height + Style.space(8)
+      flick.contentY = y + item.height - flick.height + Style.space(8);
   }
 
   onActiveCountChanged: {
     if (root.activeCount === 0 && root.focusSection === "downloads" && root.cursorActive) {
-      root.focusSection = "input"
-      root.selectedIndex = 0
+      root.focusSection = "input";
+      root.selectedIndex = 0;
     } else if (root.focusSection === "downloads") {
-      root.clampIndex()
+      root.clampIndex();
     }
   }
 
   onDetectedSectionVisibleChanged: {
     if (!root.detectedSectionVisible && root.focusSection === "detected" && root.cursorActive) {
-      root.focusSection = "input"
-      root.selectedIndex = 0
+      root.focusSection = "input";
+      root.selectedIndex = 0;
     }
   }
 
   onPlaylistSectionVisibleChanged: {
     if (!root.playlistSectionVisible && root.focusSection === "playlist" && root.cursorActive) {
-      root.focusSection = "input"
-      root.selectedIndex = 0
+      root.focusSection = "input";
+      root.selectedIndex = 0;
     }
   }
 
   onQueuedCountChanged: {
     if (root.queuedCount === 0 && root.focusSection === "queue" && root.cursorActive) {
-      root.focusSection = "input"
-      root.selectedIndex = 0
+      root.focusSection = "input";
+      root.selectedIndex = 0;
     } else if (root.focusSection === "queue") {
-      root.clampIndex()
+      root.clampIndex();
     }
   }
 
   onHistoryCountChanged: {
     if (root.historyCount === 0 && root.focusSection === "history" && root.cursorActive) {
-      root.focusSection = "input"
-      root.selectedIndex = 0
+      root.focusSection = "input";
+      root.selectedIndex = 0;
     } else if (root.focusSection === "history") {
-      root.clampIndex()
+      root.clampIndex();
     }
   }
 
   Component.onCompleted: {
-    root.wireService()
-    if (ytdlService) ytdlService.checkInstallation()
+    root.wireService();
+    if (ytdlService)
+      ytdlService.checkInstallation();
   }
 
   onYtdlServiceChanged: Qt.callLater(root.wireService)
@@ -439,7 +504,8 @@ Panel {
     interval: 450
     repeat: false
     onTriggered: {
-      if (ytdlService) ytdlService.fetchPlaylistInfo(root.inputUrl)
+      if (ytdlService)
+        ytdlService.fetchPlaylistInfo(root.inputUrl);
     }
   }
 
@@ -453,30 +519,32 @@ Panel {
     contentWidth: panel.fittedContentWidth(Style.space(420))
     // SettingsPanel is a Flickable with no implicitHeight, so the card sizes
     // from its exposed preferredHeight when the settings page is showing.
-    contentHeight: panel.fittedContentHeight(
-      root.settingsPanelVisible && settingsPanelLoader.item
-        ? settingsPanelLoader.item.preferredHeight
-        : flick.contentHeight,
-      root.settingsPanelVisible ? Style.space(560) : Style.space(500))
+    contentHeight: panel.fittedContentHeight(root.settingsPanelVisible && settingsPanelLoader.item ? settingsPanelLoader.item.preferredHeight : flick.contentHeight, root.settingsPanelVisible ? Style.space(560) : Style.space(500))
 
     PanelKeyCatcher {
       id: keyCatcher
       anchors.fill: parent
       // Let the URL field, a settings dropdown popup, or the languages input
       // own all keys while they are focused.
-      blocked: urlInput.activeFocus
-        || (settingsPanelLoader.active && settingsPanelLoader.item
-            && (settingsPanelLoader.item.isPopupOpen || settingsPanelLoader.item.isInputActive))
+      blocked: urlInput.activeFocus || (settingsPanelLoader.active && settingsPanelLoader.item && (settingsPanelLoader.item.isPopupOpen || settingsPanelLoader.item.isInputActive))
 
-      onMoveRequested: function(dx, dy) { root.moveCursor(dx, dy) }
+      onMoveRequested: function (dx, dy) {
+        root.moveCursor(dx, dy);
+      }
       onActivateRequested: root.activateCursor()
       onCloseRequested: {
-        if (root.settingsPanelVisible) root.closeSettings()
-        else root.close()
+        if (root.settingsPanelVisible)
+          root.closeSettings();
+        else
+          root.close();
       }
       onDeleteRequested: root.deleteCursor()
-      onTabRequested: function(direction) { root.switchPanel(direction) }
-      onTextKey: function(t) { root.handleTextKey(t) }
+      onTabRequested: function (direction) {
+        root.switchPanel(direction);
+      }
+      onTextKey: function (t) {
+        root.handleTextKey(t);
+      }
 
       // Main Download view
       Flickable {
@@ -539,9 +607,7 @@ Panel {
 
             Button {
               width: parent.width
-              text: root.ytdlService && root.ytdlService.installing
-                ? "Installing yt-dlp\u2026"
-                : "Install yt-dlp"
+              text: root.ytdlService && root.ytdlService.installing ? "Installing yt-dlp\u2026" : "Install yt-dlp"
               iconText: root.ytdlService && root.ytdlService.installing ? "" : ""
               iconSpinning: root.ytdlService && root.ytdlService.installing
               fontFamily: root.fontFamily
@@ -554,13 +620,15 @@ Panel {
               selected: true
               hasCursor: root.cursorActive && root.focusSection === "install"
               enabled: !(root.ytdlService && root.ytdlService.installing)
-              onHovered: function(hovered) {
-                if (hovered) root.focusSectionAt("install", 0)
+              onHovered: function (hovered) {
+                if (hovered)
+                  root.focusSectionAt("install", 0);
               }
               onClicked: {
                 if (root.ytdlService) {
-                  if (root.ytdlService.installing) return
-                  root.ytdlService.installInTerminal()
+                  if (root.ytdlService.installing)
+                    return;
+                  root.ytdlService.installInTerminal();
                 }
               }
             }
@@ -586,11 +654,13 @@ Panel {
                 accent: root.activeColor
                 hasCursor: root.cursorActive && root.focusSection === "input" && root.selectedIndex === 0
                 onAccepted: root.submitUrl()
-                onHoveredChanged: if (hovered) root.focusSectionAt("input", 0)
+                onHoveredChanged: if (hovered)
+                  root.focusSectionAt("input", 0)
                 onTextChanged: {
-                  root.inputUrl = text
-                  if (text !== root.clipboardUrl) root.clipboardUrl = ""
-                  playlistInfoTimer.restart()
+                  root.inputUrl = text;
+                  if (text !== root.clipboardUrl)
+                    root.clipboardUrl = "";
+                  playlistInfoTimer.restart();
                 }
                 Keys.onEscapePressed: root.focusPanel()
               }
@@ -605,8 +675,9 @@ Panel {
                 bordered: true
                 implicitHeight: Style.space(36)
                 hasCursor: root.cursorActive && root.focusSection === "input" && root.selectedIndex === 1
-                onHovered: function(hovered) {
-                  if (hovered) root.focusSectionAt("input", 1)
+                onHovered: function (hovered) {
+                  if (hovered)
+                    root.focusSectionAt("input", 1);
                 }
                 onClicked: root.openSettings()
               }
@@ -625,8 +696,9 @@ Panel {
                 enabled: root.inputUrl !== ""
                 opacity: enabled ? 1 : 0.35
                 hasCursor: root.cursorActive && root.focusSection === "input" && root.selectedIndex === 2
-                onHovered: function(hovered) {
-                  if (hovered) root.focusSectionAt("input", 2)
+                onHovered: function (hovered) {
+                  if (hovered)
+                    root.focusSectionAt("input", 2);
                 }
                 onClicked: root.submitUrl()
               }
@@ -698,8 +770,8 @@ Panel {
                 hasCursor: root.cursorActive && root.focusSection === "detected"
                 onClicked: {
                   if (ytdlService && ytdlService.detectedUrl) {
-                    ytdlService.startDownload(ytdlService.detectedUrl, ytdlService.selectedQuality, false, ytdlService.detectedTitle || "", ytdlService.defaultDownloadType)
-                    ytdlService.clearDetection()
+                    ytdlService.startDownload(ytdlService.detectedUrl, ytdlService.selectedQuality, false, ytdlService.detectedTitle || "", ytdlService.defaultDownloadType);
+                    ytdlService.clearDetection();
                   }
                 }
               }
@@ -740,14 +812,7 @@ Panel {
 
                 Text {
                   width: parent.width
-                  text: ytdlService
-                    ? (ytdlService.playlistInfoLoading ? "Resolving playlist\u2026"
-                       : ytdlService.playlistInfoError ? "Could not resolve playlist"
-                       : ytdlService.playlistInfoName
-                         ? ytdlService.playlistInfoName + " \u00b7 " + ytdlService.playlistInfoCount
-                           + (ytdlService.playlistInfoCount === 1 ? " video" : " videos")
-                         : "")
-                    : ""
+                  text: ytdlService ? (ytdlService.playlistInfoLoading ? "Resolving playlist\u2026" : ytdlService.playlistInfoError ? "Could not resolve playlist" : ytdlService.playlistInfoName ? ytdlService.playlistInfoName + " \u00b7 " + ytdlService.playlistInfoCount + (ytdlService.playlistInfoCount === 1 ? " video" : " videos") : "") : ""
                   color: Qt.darker(root.foreground, 1.4)
                   font.family: root.fontFamily
                   font.pixelSize: Style.font.caption
@@ -769,11 +834,11 @@ Panel {
                 hasCursor: root.cursorActive && root.focusSection === "playlist"
                 onClicked: {
                   if (ytdlService && ytdlService.playlistInfoUrl) {
-                    ytdlService.startPlaylist(ytdlService.playlistInfoUrl, ytdlService.selectedQuality, ytdlService.defaultDownloadType)
-                    ytdlService.clearPlaylistInfo()
-                    root.clipboardUrl = ""
-                    root.inputUrl = ""
-                    urlInput.text = ""
+                    ytdlService.startPlaylist(ytdlService.playlistInfoUrl, ytdlService.selectedQuality, ytdlService.defaultDownloadType);
+                    ytdlService.clearPlaylistInfo();
+                    root.clipboardUrl = "";
+                    root.inputUrl = "";
+                    urlInput.text = "";
                   }
                 }
               }
@@ -814,7 +879,8 @@ Panel {
                 fontSize: Style.font.bodySmall
                 hasCursor: root.cursorActive && root.focusSection === "downloads" && root.selectedIndex === 0
                 onClicked: {
-                  if (ytdlService) ytdlService.cancelAll()
+                  if (ytdlService)
+                    ytdlService.cancelAll();
                 }
               }
             }
@@ -828,19 +894,18 @@ Panel {
                 height: dlBody.implicitHeight + Style.space(16)
                 foreground: root.foreground
                 accent: root.activeColor
-                hasCursor: root.cursorActive && root.focusSection === "downloads" && root.selectedIndex === index + 1
-                  || root.hoverSection === "downloads" && root.hoverIndex === index
+                hasCursor: root.cursorActive && root.focusSection === "downloads" && root.selectedIndex === index + 1 || root.hoverSection === "downloads" && root.hoverIndex === index
 
                 MouseArea {
                   anchors.fill: parent
                   hoverEnabled: true
                   onContainsMouseChanged: {
                     if (containsMouse) {
-                      root.hoverSection = "downloads"
-                      root.hoverIndex = index
+                      root.hoverSection = "downloads";
+                      root.hoverIndex = index;
                     } else if (root.hoverSection === "downloads" && root.hoverIndex === index) {
-                      root.hoverSection = ""
-                      root.hoverIndex = -1
+                      root.hoverSection = "";
+                      root.hoverIndex = -1;
                     }
                   }
                   onClicked: root.focusSectionAt("downloads", index)
@@ -876,7 +941,8 @@ Panel {
                       fontFamily: root.fontFamily
                       fontSize: Style.font.bodySmall
                       onClicked: {
-                        if (ytdlService) ytdlService.cancelDownload(modelData.dwnId)
+                        if (ytdlService)
+                          ytdlService.cancelDownload(modelData.dwnId);
                       }
                     }
                   }
@@ -893,7 +959,12 @@ Panel {
                       radius: parent.radius
                       color: root.activeColor
 
-                      Behavior on width { NumberAnimation { duration: 250; easing.type: Easing.OutCubic } }
+                      Behavior on width  {
+                        NumberAnimation {
+                          duration: 250
+                          easing.type: Easing.OutCubic
+                        }
+                      }
                     }
                   }
 
@@ -958,7 +1029,8 @@ Panel {
                 fontSize: Style.font.bodySmall
                 hasCursor: root.cursorActive && root.focusSection === "queue" && root.selectedIndex === 0
                 onClicked: {
-                  if (ytdlService) ytdlService.clearQueue()
+                  if (ytdlService)
+                    ytdlService.clearQueue();
                 }
               }
             }
@@ -972,19 +1044,18 @@ Panel {
                 height: qBody.implicitHeight + Style.space(12)
                 foreground: root.foreground
                 accent: root.activeColor
-                hasCursor: root.cursorActive && root.focusSection === "queue" && root.selectedIndex === index + 1
-                  || root.hoverSection === "queue" && root.hoverIndex === index
+                hasCursor: root.cursorActive && root.focusSection === "queue" && root.selectedIndex === index + 1 || root.hoverSection === "queue" && root.hoverIndex === index
 
                 MouseArea {
                   anchors.fill: parent
                   hoverEnabled: true
                   onContainsMouseChanged: {
                     if (containsMouse) {
-                      root.hoverSection = "queue"
-                      root.hoverIndex = index
+                      root.hoverSection = "queue";
+                      root.hoverIndex = index;
                     } else if (root.hoverSection === "queue" && root.hoverIndex === index) {
-                      root.hoverSection = ""
-                      root.hoverIndex = -1
+                      root.hoverSection = "";
+                      root.hoverIndex = -1;
                     }
                   }
                   onClicked: root.focusSectionAt("queue", index)
@@ -1031,7 +1102,8 @@ Panel {
                     fontFamily: root.fontFamily
                     fontSize: Style.font.bodySmall
                     onClicked: {
-                      if (ytdlService) ytdlService.removeQueued(modelData.dwnId)
+                      if (ytdlService)
+                        ytdlService.removeQueued(modelData.dwnId);
                     }
                   }
                 }
@@ -1040,8 +1112,7 @@ Panel {
           }
 
           Column {
-            visible: root.installed && root.historyCount > 0
-              && (!ytdlService || ytdlService.enableHistory)
+            visible: root.installed && root.historyCount > 0 && (!ytdlService || ytdlService.enableHistory)
             width: parent.width
             spacing: Style.space(8)
 
@@ -1075,7 +1146,8 @@ Panel {
                 fontSize: Style.font.bodySmall
                 hasCursor: root.cursorActive && root.focusSection === "history" && root.selectedIndex === 0 && root.hasRetryableItems
                 onClicked: {
-                  if (ytdlService) ytdlService.retryAll()
+                  if (ytdlService)
+                    ytdlService.retryAll();
                 }
               }
 
@@ -1088,7 +1160,8 @@ Panel {
                 fontSize: Style.font.bodySmall
                 hasCursor: root.cursorActive && root.focusSection === "history" && root.selectedIndex === 0
                 onClicked: {
-                  if (ytdlService) ytdlService.clearHistory()
+                  if (ytdlService)
+                    ytdlService.clearHistory();
                 }
               }
             }
@@ -1102,28 +1175,29 @@ Panel {
                 height: histBody.implicitHeight + Style.space(12)
                 foreground: root.foreground
                 accent: root.activeColor
-                hasCursor: root.cursorActive && root.focusSection === "history" && root.selectedIndex === index + 1
-                  || root.hoverSection === "history" && root.hoverIndex === index
+                hasCursor: root.cursorActive && root.focusSection === "history" && root.selectedIndex === index + 1 || root.hoverSection === "history" && root.hoverIndex === index
 
                 MouseArea {
                   anchors.fill: parent
                   hoverEnabled: true
                   onContainsMouseChanged: {
                     if (containsMouse) {
-                      root.hoverSection = "history"
-                      root.hoverIndex = index
+                      root.hoverSection = "history";
+                      root.hoverIndex = index;
                     } else if (root.hoverSection === "history" && root.hoverIndex === index) {
-                      root.hoverSection = ""
-                      root.hoverIndex = -1
+                      root.hoverSection = "";
+                      root.hoverIndex = -1;
                     }
                   }
 
                   onClicked: {
-                    root.focusSectionAt("history", index)
+                    root.focusSectionAt("history", index);
                     if (modelData.status === "done" && modelData._downloadType !== "transcript") {
-                      if (ytdlService) ytdlService.playFile(modelData.filepath)
+                      if (ytdlService)
+                        ytdlService.playFile(modelData.filepath);
                     } else if (modelData.status === "error" || modelData.status === "cancelled") {
-                      if (ytdlService) ytdlService.retryDownload(modelData)
+                      if (ytdlService)
+                        ytdlService.retryDownload(modelData);
                     }
                   }
                 }
@@ -1136,14 +1210,8 @@ Panel {
 
                   Text {
                     Layout.alignment: Qt.AlignVCenter
-                    text: modelData.status === "done" ? ""
-                      : modelData.status === "error" ? ""
-                      : modelData.status === "cancelled" ? "󰜺"
-                      : modelData.status === "unavailable" ? ""
-                      : ""
-                    color: modelData.status === "done" ? "#4ade80"
-                      : modelData.status === "error" ? Color.urgent
-                      : Qt.darker(root.foreground, 1.4)
+                    text: modelData.status === "done" ? "" : modelData.status === "error" ? "" : modelData.status === "cancelled" ? "󰜺" : modelData.status === "unavailable" ? "" : ""
+                    color: modelData.status === "done" ? "#4ade80" : modelData.status === "error" ? Color.urgent : Qt.darker(root.foreground, 1.4)
                     font.family: root.fontFamily
                     font.pixelSize: Style.font.body
                   }
@@ -1167,11 +1235,15 @@ Panel {
                     Text {
                       width: parent.width
                       text: {
-                        if (modelData.status === "done") return "Completed"
-                        if (modelData.status === "unavailable") return "Subtitles not available"
-                        if (modelData.status === "error") return modelData.error || "Download failed"
-                        if (modelData.status === "cancelled") return "Cancelled"
-                        return modelData.status
+                        if (modelData.status === "done")
+                          return "Completed";
+                        if (modelData.status === "unavailable")
+                          return "Subtitles not available";
+                        if (modelData.status === "error")
+                          return modelData.error || "Download failed";
+                        if (modelData.status === "cancelled")
+                          return "Cancelled";
+                        return modelData.status;
                       }
                       color: Qt.darker(root.foreground, 1.4)
                       font.family: root.fontFamily
@@ -1195,7 +1267,8 @@ Panel {
                       fontFamily: root.fontFamily
                       fontSize: Style.font.bodySmall
                       onClicked: {
-                        if (ytdlService) ytdlService.retryDownload(modelData)
+                        if (ytdlService)
+                          ytdlService.retryDownload(modelData);
                       }
                     }
 
@@ -1208,7 +1281,8 @@ Panel {
                       fontFamily: root.fontFamily
                       fontSize: Style.font.bodySmall
                       onClicked: {
-                        if (ytdlService) ytdlService.deleteHistoryItem(modelData.dwnId)
+                        if (ytdlService)
+                          ytdlService.deleteHistoryItem(modelData.dwnId);
                       }
                     }
 
@@ -1220,7 +1294,8 @@ Panel {
                       fontFamily: root.fontFamily
                       fontSize: Style.font.bodySmall
                       onClicked: {
-                        if (ytdlService) ytdlService.removeHistoryItem(modelData.dwnId)
+                        if (ytdlService)
+                          ytdlService.removeHistoryItem(modelData.dwnId);
                       }
                     }
                   }
@@ -1270,15 +1345,21 @@ Panel {
         visible: root.settingsPanelVisible
         source: "SettingsPanel.qml"
         onLoaded: {
-          item.ytdlService = root.ytdlService
-          item.foreground = root.foreground
-          item.activeColor = root.activeColor
-          item.fontFamily = root.fontFamily
-          item.cursorActive = Qt.binding(function() { return root.cursorActive && root.focusSection === "settings" })
-          item.selectedIndex = Qt.binding(function() { return root.selectedIndex })
-          item.closeRequested.connect(root.closeSettings)
-          item.inputClosed.connect(root.focusPanel)
-          item.cursorMoveRequested.connect(function(i) { root.focusSectionAt("settings", i) })
+          item.ytdlService = root.ytdlService;
+          item.foreground = root.foreground;
+          item.activeColor = root.activeColor;
+          item.fontFamily = root.fontFamily;
+          item.cursorActive = Qt.binding(function () {
+              return root.cursorActive && root.focusSection === "settings";
+            });
+          item.selectedIndex = Qt.binding(function () {
+              return root.selectedIndex;
+            });
+          item.closeRequested.connect(root.closeSettings);
+          item.inputClosed.connect(root.focusPanel);
+          item.cursorMoveRequested.connect(function (i) {
+              root.focusSectionAt("settings", i);
+            });
         }
       }
     }
