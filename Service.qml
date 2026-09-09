@@ -72,8 +72,6 @@ Item {
 
   // Persisted across shell restarts via a small state file.
   property string selectedQuality: "1080p"
-  property bool _qualityFromFile: false
-  readonly property string statePath: Quickshell.env("HOME") + "/.local/state/omarchy/ytdl-quality"
   readonly property string historyPath: Quickshell.env("HOME") + "/.local/state/omarchy/ytdl-history.json"
 
   signal downloadsUpdated
@@ -85,6 +83,74 @@ Item {
   signal openSettingsRequested(bool open)
 
   readonly property string scriptPath: Qt.resolvedUrl("scripts/ytdl").toString().replace(/^file:\/\//, "")
+  readonly property string configPath: Quickshell.env("HOME") + "/.config/omarchy/ytdl.json"
+  readonly property string saveScriptPath: Qt.resolvedUrl("scripts/save-setting").toString().replace(/^file:\/\//, "")
+  property var fileConfig: ({})
+  function parseFileConfig(raw) {
+    try {
+      var parsed = JSON.parse(String(raw || ""));
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : ({});
+    } catch (e) { return ({}); }
+  }
+  // Config values can arrive as strings ("false") if an older build ever
+  // persisted one; coerce instead of letting !!"false" be true.
+  function asBool(v) {
+    return v === true || v === "true";
+  }
+  function applyFileConfig() {
+    var settings = root.fileConfig || {};
+    if (settings.downloadLocation)
+      downloadLocation = settings.downloadLocation;
+    if (settings.defaultQuality) {
+      defaultQuality = settings.defaultQuality;
+      selectedQuality = settings.defaultQuality;
+    }
+    if (settings.defaultDownloadType)
+      defaultDownloadType = settings.defaultDownloadType;
+    if (settings.cookiesBrowser)
+      cookiesBrowser = settings.cookiesBrowser;
+    if (settings.extraArgs != null)
+      extraArgs = settings.extraArgs;
+    if (settings.enableHistory != null)
+      enableHistory = asBool(settings.enableHistory);
+    if (settings.downloadTranscripts != null)
+      downloadTranscripts = asBool(settings.downloadTranscripts);
+    if (settings.transcriptLanguages)
+      transcriptLanguages = settings.transcriptLanguages;
+    if (settings.playlistInSeparateFolder != null)
+      playlistInSeparateFolder = asBool(settings.playlistInSeparateFolder);
+  }
+  function persistFileSetting() {
+    configSaveDebounce.restart();
+  }
+  Timer {
+    id: configSaveDebounce
+    interval: 750
+    onTriggered: root.flushFileConfig()
+  }
+  function flushFileConfig() {
+    var doc = {
+      downloadLocation: downloadLocation,
+      defaultQuality: selectedQuality,
+      defaultDownloadType: defaultDownloadType,
+      cookiesBrowser: cookiesBrowser,
+      extraArgs: extraArgs,
+      enableHistory: enableHistory,
+      downloadTranscripts: downloadTranscripts,
+      transcriptLanguages: transcriptLanguages,
+      playlistInSeparateFolder: playlistInSeparateFolder
+    };
+    Quickshell.execDetached([root.saveScriptPath, root.configPath, JSON.stringify(doc)]);
+  }
+  FileView {
+    id: configFile
+    path: root.configPath
+    watchChanges: true
+    printErrors: false
+    onLoaded: { root.fileConfig = root.parseFileConfig(text()); root.applyFileConfig(); }
+    onFileChanged: configFile.reload()
+    onLoadFailed: root.fileConfig = ({})
+  }
   readonly property string detectScriptPath: Qt.resolvedUrl("scripts/detect-url-mpri").toString().replace(/^file:\/\//, "")
   readonly property string autoDownloadScriptPath: Qt.resolvedUrl("scripts/auto-download.sh").toString().replace(/^file:\/\//, "")
 
@@ -114,99 +180,15 @@ Item {
     }
   }
 
-  function configure(settings) {
-    if (!settings)
-      return;
-    if (settings.downloadLocation)
-      downloadLocation = settings.downloadLocation;
-    if (settings.defaultQuality) {
-      defaultQuality = settings.defaultQuality;
-      if (!root._qualityFromFile)
-        selectedQuality = settings.defaultQuality;
-    }
-    if (settings.defaultDownloadType)
-      defaultDownloadType = settings.defaultDownloadType;
-    if (settings.cookiesBrowser)
-      cookiesBrowser = settings.cookiesBrowser;
-    if (settings.extraArgs != null)
-      extraArgs = settings.extraArgs;
-    // Config values can arrive as strings ("false") if an older build ever
-    // persisted one; coerce instead of letting !!"false" be true.
-    function asBool(v) {
-      return v === true || v === "true";
-    }
-    if (settings.enableHistory != null)
-      enableHistory = asBool(settings.enableHistory);
-    if (settings.downloadTranscripts != null)
-      downloadTranscripts = asBool(settings.downloadTranscripts);
-    if (settings.transcriptLanguages)
-      transcriptLanguages = settings.transcriptLanguages;
-    if (settings.playlistInSeparateFolder != null)
-      playlistInSeparateFolder = asBool(settings.playlistInSeparateFolder);
+  function configure() {
+    root.applyFileConfig();
   }
 
   function updateSetting(key, value) {
     root[key] = value;
-    if (key === "selectedQuality") {
-      root.persistQuality();
-      root.setDefaultQuality(value);
-      return;
-    }
-    if (shell && typeof shell.mutateShellConfig === "function") {
-      shell.mutateShellConfig(function (copy) {
-          if (copy.bar && copy.bar.layout) {
-            var sections = ["left", "center", "right"];
-            for (var si = 0; si < sections.length; si++) {
-              var entries = copy.bar.layout[sections[si]];
-              if (!Array.isArray(entries))
-                continue;
-              for (var ei = 0; ei < entries.length; ei++) {
-                if (entries[ei] && String(entries[ei].id) === "bibek.ytdl")
-                  entries[ei][key] = value;
-              }
-            }
-          }
-          if (Array.isArray(copy.plugins)) {
-            for (var pi = 0; pi < copy.plugins.length; pi++) {
-              if (copy.plugins[pi] && String(copy.plugins[pi].id) === "bibek.ytdl")
-                copy.plugins[pi][key] = value;
-            }
-          }
-        });
-    }
-  }
-
-  function persistQuality() {
-    root._qualityFromFile = true;
-    Quickshell.execDetached(["sh", "-c", "printf '%s' '" + root.selectedQuality + "' > " + root.statePath]);
-  }
-
-  // Cycling quality in the panel also rewrites the defaultQuality setting so
-  // the shell.json config, not just the in-memory selection, follows the user.
-  function setDefaultQuality(q) {
-    root.defaultQuality = q;
-    if (shell && typeof shell.mutateShellConfig === "function") {
-      shell.mutateShellConfig(function (copy) {
-          if (copy.bar && copy.bar.layout) {
-            var sections = ["left", "center", "right"];
-            for (var si = 0; si < sections.length; si++) {
-              var entries = copy.bar.layout[sections[si]];
-              if (!Array.isArray(entries))
-                continue;
-              for (var ei = 0; ei < entries.length; ei++) {
-                if (entries[ei] && String(entries[ei].id) === "bibek.ytdl")
-                  entries[ei].defaultQuality = q;
-              }
-            }
-          }
-          if (Array.isArray(copy.plugins)) {
-            for (var pi = 0; pi < copy.plugins.length; pi++) {
-              if (copy.plugins[pi] && String(copy.plugins[pi].id) === "bibek.ytdl")
-                copy.plugins[pi].defaultQuality = q;
-            }
-          }
-        });
-    }
+    if (key === "selectedQuality")
+      defaultQuality = value;
+    root.persistFileSetting();
   }
 
   function historyToJSON() {
@@ -267,20 +249,6 @@ Item {
           root.historyUpdated();
         }
       } catch (e) {
-      }
-    }
-  }
-
-  FileView {
-    id: qualityStateFile
-    path: root.statePath
-    preload: true
-    printErrors: false
-    onLoaded: {
-      var v = String(text()).trim();
-      if (["best", "1080p", "720p", "480p"].indexOf(v) !== -1) {
-        root._qualityFromFile = true;
-        root.selectedQuality = v;
       }
     }
   }

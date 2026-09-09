@@ -28,7 +28,7 @@ BarWidget {
 
   function syncService() {
     if (ytdlService && typeof ytdlService.configure === "function")
-      ytdlService.configure(settings);
+      ytdlService.configure();
     injectPanel();
   }
 

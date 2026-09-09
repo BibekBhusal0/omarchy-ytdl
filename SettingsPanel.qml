@@ -60,6 +60,7 @@ Flickable {
       items.push("languages");
     }
     items.push("playlistFolder");
+    items.push("history");
     items.push("back");
     return items;
   }
@@ -88,6 +89,10 @@ Flickable {
       if (ytdlService) {
         ytdlService.updateSetting("playlistInSeparateFolder", !ytdlService.playlistInSeparateFolder);
       }
+    } else if (itemKey === "history") {
+      if (ytdlService) {
+        ytdlService.updateSetting("enableHistory", !ytdlService.enableHistory);
+      }
     } else if (itemKey === "back") {
       root.closeRequested();
     }
@@ -110,6 +115,8 @@ Flickable {
       item = langInput;
     else if (itemKey === "playlistFolder")
       item = playlistFolderToggle;
+    else if (itemKey === "history")
+      item = historyToggle;
     else if (itemKey === "back")
       item = backBtn;
     if (!item)
@@ -305,6 +312,25 @@ Flickable {
       onClicked: {
         if (ytdlService) {
           ytdlService.updateSetting("playlistInSeparateFolder", !ytdlService.playlistInSeparateFolder);
+        }
+      }
+    }
+
+    // Keep history toggle row
+    Toggle {
+      id: historyToggle
+      width: parent.width
+      label: "Keep History"
+      description: "Remember completed downloads in the history list."
+      checked: ytdlService ? ytdlService.enableHistory : true
+      hasCursor: root.cursorActive && root.visibleItems[root.selectedIndex] === "history"
+      onHovered: function (isHovered) {
+        if (isHovered)
+          root.hoverKey("history");
+      }
+      onClicked: {
+        if (ytdlService) {
+          ytdlService.updateSetting("enableHistory", !ytdlService.enableHistory);
         }
       }
     }

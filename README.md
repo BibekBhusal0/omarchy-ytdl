@@ -66,11 +66,10 @@ o.bind("SUPER SHIFT", "Y", "exec, omarchy shell ytdl autoDownload")
 
 ## Configuration
 
-Options can be customized via the interactive settings panel (click the button displaying the current quality/type summary in the downloader panel) or directly in `~/.config/omarchy/shell.json`:
+Options can be customized via the interactive settings panel (click the button displaying the current quality/type summary in the downloader panel) or directly in `~/.config/omarchy/ytdl.json` (watched live, so edits apply instantly; the panel writes back to the same file):
 
 ```json
 {
-  "id": "bibek.ytdl",
   "downloadLocation": "~/Downloads/yt-dlp",
   "defaultQuality": "1080p",
   "defaultDownloadType": "video",
@@ -138,5 +137,8 @@ Here are my other Omarchy plugins:
 - [Focusd](https://github.com/BibekBhusal0/omarchy-focusd) - pomodoro timer with streak, history and daily goal
 - [Obsidian Search](https://github.com/BibekBhusal0/omarchy-obsidian-search) - fuzzy-search your Obsidian vault
 - [Readest](https://github.com/BibekBhusal0/omarchy-readest) - fuzzy-search your Readest library
+- [Better Lock](https://github.com/BibekBhusal0/omarchy-better-lock) - lock screen with date/time, media and power controls
+- [Better Media](https://github.com/BibekBhusal0/omarchy-better-media) - MPRIS now-playing with playback controls
+- [Better Menu](https://github.com/BibekBhusal0/omarchy-better-menu) - fuzzy menu with app grid, calculator and web search
 
 Please give a star if you find them useful!

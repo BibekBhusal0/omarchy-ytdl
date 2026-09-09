@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Persist the ytdl settings snapshot into its JSON config file.
+# Usage: save-setting <config-file> <json-document>
+# Only known keys survive; anything else in the document is dropped.
+set -euo pipefail
+
+file="${1:?config file required}"
+json="${2:?json document required}"
+
+tmp="$(mktemp)" || exit 1
+jq -n --argjson doc "$json" '$doc | {downloadLocation, defaultQuality, defaultDownloadType, cookiesBrowser, extraArgs, enableHistory, downloadTranscripts, transcriptLanguages, playlistInSeparateFolder} | with_entries(select(.value != null))' >"$tmp"
+# Redirect, never move: mv would replace a symlinked config with a real file.
+cat "$tmp" >"$file"
+rm -f "$tmp"

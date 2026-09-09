@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "bibek.ytdl",
   "name": "Youtube Video Downloader",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "author": "Bibek Bhusal",
   "description": "Download videos and playlists from YouTube and other sites via yt-dlp with up to three parallel downloads, a queue, and a persistent history.",
   "homepage": "https://github.com/BibekBhusal0/omarchy-ytdl",
@@ -31,89 +31,6 @@
       "downloadTranscripts": false,
       "transcriptLanguages": "en",
       "playlistInSeparateFolder": true
-    },
-    "schema": [
-      {
-        "key": "downloadLocation",
-        "type": "string",
-        "label": "Download location",
-        "description": "Directory where videos are saved."
-      },
-      {
-        "key": "defaultQuality",
-        "type": "enum",
-        "label": "Default quality",
-        "options": [
-          "best",
-          "1080p",
-          "720p",
-          "480p"
-        ],
-        "defaultValue": "1080p",
-        "description": "Default download quality for video."
-      },
-      {
-        "key": "defaultDownloadType",
-        "type": "enum",
-        "label": "Default download type",
-        "options": [
-          "video",
-          "audio",
-          "both"
-        ],
-        "defaultValue": "video",
-        "description": "What to download by default: video only, audio only, or both."
-      },
-      {
-        "key": "downloadTranscripts",
-        "type": "boolean",
-        "label": "Download transcripts",
-        "description": "Automatically download subtitles/transcripts with videos.",
-        "defaultValue": false
-      },
-      {
-        "key": "transcriptLanguages",
-        "type": "string",
-        "label": "Transcript languages",
-        "description": "Comma-separated language codes for transcripts (e.g., 'en,es,fr'). Use 'all' for all available.",
-        "defaultValue": "en"
-      },
-      {
-        "key": "playlistInSeparateFolder",
-        "type": "boolean",
-        "label": "Playlist in separate folder",
-        "description": "Download playlists into their own subfolder named after the playlist.",
-        "defaultValue": true
-      },
-      {
-        "key": "cookiesBrowser",
-        "type": "enum",
-        "label": "Cookies from browser",
-        "options": [
-          "none",
-          "firefox",
-          "chromium",
-          "chrome",
-          "zen",
-          "helium",
-          "glide"
-        ],
-        "defaultValue": "none",
-        "description": "Browser to pull cookies from to bypass YouTube bot detection. Use 'none' if you have no issues."
-      },
-      {
-        "key": "extraArgs",
-        "type": "string",
-        "label": "Extra yt-dlp args",
-        "description": "Extra arguments passed to every yt-dlp invocation, e.g. '--cookies-from-browser chromium' or '--socket-timeout 30'."
-      },
-      {
-        "key": "enableHistory",
-        "type": "boolean",
-        "label": "Enable download history",
-        "description": "Keep finished downloads in a history list with play, retry and remove actions.",
-        "defaultValue": true
-      }
-    ]
+    }
   }
 }
