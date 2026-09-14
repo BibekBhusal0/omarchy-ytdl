@@ -90,7 +90,9 @@ Item {
     try {
       var parsed = JSON.parse(String(raw || ""));
       return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : ({});
-    } catch (e) { return ({}); }
+    } catch (e) {
+      return ({});
+    }
   }
   // Config values can arrive as strings ("false") if an older build ever
   // persisted one; coerce instead of letting !!"false" be true.
@@ -130,15 +132,15 @@ Item {
   }
   function flushFileConfig() {
     var doc = {
-      downloadLocation: downloadLocation,
-      defaultQuality: selectedQuality,
-      defaultDownloadType: defaultDownloadType,
-      cookiesBrowser: cookiesBrowser,
-      extraArgs: extraArgs,
-      enableHistory: enableHistory,
-      downloadTranscripts: downloadTranscripts,
-      transcriptLanguages: transcriptLanguages,
-      playlistInSeparateFolder: playlistInSeparateFolder
+      "downloadLocation": downloadLocation,
+      "defaultQuality": selectedQuality,
+      "defaultDownloadType": defaultDownloadType,
+      "cookiesBrowser": cookiesBrowser,
+      "extraArgs": extraArgs,
+      "enableHistory": enableHistory,
+      "downloadTranscripts": downloadTranscripts,
+      "transcriptLanguages": transcriptLanguages,
+      "playlistInSeparateFolder": playlistInSeparateFolder
     };
     Quickshell.execDetached([root.saveScriptPath, root.configPath, JSON.stringify(doc)]);
   }
@@ -147,7 +149,10 @@ Item {
     path: root.configPath
     watchChanges: true
     printErrors: false
-    onLoaded: { root.fileConfig = root.parseFileConfig(text()); root.applyFileConfig(); }
+    onLoaded: {
+      root.fileConfig = root.parseFileConfig(text());
+      root.applyFileConfig();
+    }
     onFileChanged: configFile.reload()
     onLoadFailed: root.fileConfig = ({})
   }

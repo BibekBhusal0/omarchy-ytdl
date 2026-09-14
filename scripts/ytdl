@@ -20,6 +20,29 @@ _kill_tree() {
 # authentication material never persists outside the browser profile.
 COOKIE_TMP=""
 trap '[ -n "$COOKIE_TMP" ] && rm -rf "$COOKIE_TMP"' EXIT
+# Expand ~/ in a filepath and remove yt-dlp leftovers for a cancelled or
+# failed download. BASE is the final filepath parsed from yt-dlp's
+# Destination line. Besides the pre-merged "<base>.part", split-stream runs
+# (bv+ba) leave "<stem>.f<id>.<ext>.part" temps that never match
+# "<base>.part", so those are removed via a narrow "<stem>.f*" pattern that
+# cannot collide with sibling entries. The final file itself is removed too:
+# a cancel during/after the merge (or a failed run) must not leave it behind.
+_clean_file() {
+  BASE="$1"
+  case "$BASE" in
+    "~/"*) BASE="$HOME/${BASE#\~/}" ;;
+    "~"*) BASE="$HOME/${BASE#\~}" ;;
+  esac
+  [ -z "$BASE" ] && return 0
+  rm -f "$BASE" "${BASE}.part"* "${BASE}.ytdl" "${BASE}.info.json"
+  STEM="${BASE%.*}"
+  rm -f "${STEM}.f"*.part* "${STEM}.f"*.ytdl "${STEM}.f"*.info.json 2>/dev/null
+  case "$BASE" in
+    *" [audio]."*)
+      rm -f "${STEM}".*.part* "${STEM}".*.ytdl "${STEM}".*.info.json 2>/dev/null
+      ;;
+  esac
+}
 # On TERM/INT (a cancel) kill the whole yt-dlp tree and exit; the EXIT trap
 # then drops the cookie temp dir. Without `exit` the shell would only clean
 # cookies and keep waiting on yt-dlp, surviving the cancel.
@@ -260,12 +283,7 @@ check)
     kill -KILL "$1" 2>/dev/null
     i=0
     while [ $i -lt 40 ] && kill -0 "$1" 2>/dev/null; do sleep 0.05; i=$((i + 1)); done
-    BASE="$2"
-    case "$BASE" in
-      "~/"*) BASE="$HOME/${BASE#\~/}" ;;
-      "~"*) BASE="$HOME/${BASE#\~}" ;;
-    esac
-    [ -z "$BASE" ] || rm -f "${BASE}.part"* "${BASE}.ytdl" "${BASE}.info.json"
+    _clean_file "$2"
     ;;
 
   prune-missing)
@@ -283,14 +301,7 @@ check)
     ;;
 
   cleanup)
-    # Remove yt-dlp leftovers after a cancelled/failed download: the main
-    # ".part" plus any fragment parts and the ".ytdl" info file.
-    BASE="$1"
-    case "$BASE" in
-      "~/"*) BASE="$HOME/${BASE#\~/}" ;;
-      "~"*) BASE="$HOME/${BASE#\~}" ;;
-    esac
-    [ -z "$BASE" ] || rm -f "${BASE}.part"* "${BASE}.ytdl" "${BASE}.info.json"
+    _clean_file "$1"
     ;;
 
   *)
