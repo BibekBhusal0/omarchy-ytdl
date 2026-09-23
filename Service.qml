@@ -85,6 +85,7 @@ Item {
   readonly property string scriptPath: Qt.resolvedUrl("scripts/ytdl").toString().replace(/^file:\/\//, "")
   readonly property string configPath: Quickshell.env("HOME") + "/.config/omarchy/ytdl.json"
   readonly property string saveScriptPath: Qt.resolvedUrl("scripts/save-setting").toString().replace(/^file:\/\//, "")
+  readonly property string saveHistoryPath: Qt.resolvedUrl("scripts/save-history").toString().replace(/^file:\/\//, "")
   property var fileConfig: ({})
   function parseFileConfig(raw) {
     try {
@@ -235,7 +236,7 @@ Item {
   }
 
   function persistHistory() {
-    Quickshell.execDetached(["env", "YTDL_HISTORY=" + root.historyToJSON(), "sh", "-c", "printf %s \"$YTDL_HISTORY\" > " + root.historyPath]);
+    Quickshell.execDetached([root.saveHistoryPath, root.historyPath, root.historyToJSON()]);
   }
 
   FileView {

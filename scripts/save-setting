@@ -7,8 +7,29 @@ set -euo pipefail
 file="${1:?config file required}"
 json="${2:?json document required}"
 
-tmp="$(mktemp)" || exit 1
-jq -n --argjson doc "$json" '$doc | {downloadLocation, defaultQuality, defaultDownloadType, cookiesBrowser, extraArgs, enableHistory, downloadTranscripts, transcriptLanguages, playlistInSeparateFolder} | with_entries(select(.value != null))' >"$tmp"
-# Redirect, never move: mv would replace a symlinked config with a real file.
-cat "$tmp" >"$file"
-rm -f "$tmp"
+[[ "$file" == /* ]] || exit 1
+dir="${file%/*}"
+[[ "$dir" == /* ]] || exit 1
+base="${file##*/}"
+[[ -n "$base" ]] || exit 1
+[[ "${#json}" -le 16384 ]] || exit 1
+
+[[ -d "$dir" ]] || exit 1
+[[ ! -L "$dir" ]] || exit 1
+[[ ! -L "$file" ]] || exit 1
+if [[ -e "$file" ]]; then
+  [[ -f "$file" ]] || exit 1
+fi
+
+tmp=""
+cleanup() {
+  if [[ -n "${tmp:-}" ]]; then
+    /usr/bin/rm -f -- "$tmp"
+  fi
+}
+trap cleanup EXIT
+tmp="$(/usr/bin/mktemp -- "$dir/.ytdl-tmp.XXXXXX")" || exit 1
+/usr/bin/jq -n --argjson doc "$json" '$doc | {downloadLocation, defaultQuality, defaultDownloadType, cookiesBrowser, extraArgs, enableHistory, downloadTranscripts, transcriptLanguages, playlistInSeparateFolder} | with_entries(select(.value != null))' >"$tmp" || exit 1
+/usr/bin/chmod 600 -- "$tmp" || exit 1
+/usr/bin/mv -f -- "$tmp" "$file" || exit 1
+tmp=""

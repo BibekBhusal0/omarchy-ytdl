@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# Persist the ytdl history snapshot into its JSON state file.
+# Usage: save-history <state-file> <json-document>
+set -euo pipefail
+
+file="${1:?state file required}"
+json="${2:?json document required}"
+
+[[ "$file" == /* ]] || exit 1
+dir="${file%/*}"
+[[ "$dir" == /* ]] || exit 1
+base="${file##*/}"
+[[ -n "$base" ]] || exit 1
+[[ "${#json}" -le 1048576 ]] || exit 1
+
+[[ -d "$dir" ]] || exit 1
+[[ ! -L "$dir" ]] || exit 1
+[[ ! -L "$file" ]] || exit 1
+if [[ -e "$file" ]]; then
+  [[ -f "$file" ]] || exit 1
+fi
+
+tmp=""
+cleanup() {
+  if [[ -n "${tmp:-}" ]]; then
+    /usr/bin/rm -f -- "$tmp"
+  fi
+}
+trap cleanup EXIT
+tmp="$(/usr/bin/mktemp -- "$dir/.ytdl-hist.XXXXXX")" || exit 1
+/usr/bin/jq -c 'if type == "array" then . else error("history must be an array") end' <<<"$json" >"$tmp" || exit 1
+/usr/bin/chmod 600 -- "$tmp" || exit 1
+/usr/bin/mv -f -- "$tmp" "$file" || exit 1
+tmp=""
