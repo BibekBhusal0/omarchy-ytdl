@@ -86,6 +86,78 @@ Item {
   readonly property string configPath: Quickshell.env("HOME") + "/.config/omarchy/ytdl.json"
   readonly property string saveScriptPath: Qt.resolvedUrl("scripts/save-setting").toString().replace(/^file:\/\//, "")
   readonly property string saveHistoryPath: Qt.resolvedUrl("scripts/save-history").toString().replace(/^file:\/\//, "")
+  readonly property string readScriptPath: Qt.resolvedUrl("scripts/read-config").toString().replace(/^file:\/\//, "")
+  property int maxConfigBytes: 65536
+  property int maxHistoryBytes: 1048576
+  property int configTimeoutMs: 5000
+  property var readQueue: []
+  property string readStage: ""
+  property string configRaw: ""
+  property string historyRaw: ""
+
+  function killProc(proc) {
+    try {
+      proc.signal(9);
+    } catch (e) {
+    }
+    proc.running = false;
+  }
+
+  function loadPersistedState() {
+    if (readProc.running)
+      return;
+    root.readQueue = [{
+        "kind": "config",
+        "path": root.configPath,
+        "max": root.maxConfigBytes
+      }, {
+        "kind": "history",
+        "path": root.historyPath,
+        "max": root.maxHistoryBytes
+      }];
+    root.nextRead();
+  }
+
+  function nextRead() {
+    if (root.readQueue.length === 0)
+      return;
+    var job = root.readQueue[0];
+    root.readStage = job.kind;
+    readProc.cap = job.max;
+    readProc.collected = "";
+    readProc.collectedBytes = 0;
+    readProc.overflowed = false;
+    readProc.timedOut = false;
+    readProc.command = [root.readScriptPath, job.path, String(job.max)];
+    readWatchdog.restart();
+    readProc.running = true;
+  }
+
+  function applyRead(kind, ok, raw) {
+    var next = ok ? String(raw || "") : "";
+    if (kind === "config") {
+      if (ok && next === root.configRaw)
+        return;
+      root.configRaw = next;
+      root.fileConfig = root.parseFileConfig(next);
+      root.applyFileConfig();
+      return;
+    }
+    if (!ok || next === root.historyRaw)
+      return;
+    root.historyRaw = next;
+    var text = next.trim();
+    if (!text)
+      return;
+    try {
+      var parsed = JSON.parse(text);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        root.history = root.historyFromJSON(parsed);
+        root.historyUpdated();
+      }
+    } catch (e) {
+    }
+  }
   property var fileConfig: ({})
   function parseFileConfig(raw) {
     try {
@@ -145,18 +217,80 @@ Item {
     };
     Quickshell.execDetached([root.saveScriptPath, root.configPath, JSON.stringify(doc)]);
   }
-  FileView {
-    id: configFile
-    path: root.configPath
-    watchChanges: true
-    printErrors: false
-    onLoaded: {
-      root.fileConfig = root.parseFileConfig(text());
-      root.applyFileConfig();
+  Timer {
+    id: readWatchdog
+    interval: root.configTimeoutMs
+    repeat: false
+    onTriggered: {
+      if (readProc.running) {
+        readProc.timedOut = true;
+        readProc.collected = "";
+        readProc.collectedBytes = 0;
+        root.killProc(readProc);
+      }
     }
-    onFileChanged: configFile.reload()
-    onLoadFailed: root.fileConfig = ({})
   }
+
+  Timer {
+    id: readPoll
+    interval: 10000
+    repeat: true
+    running: true
+    onTriggered: root.loadPersistedState()
+  }
+
+  Process {
+    id: readProc
+    property string collected: ""
+    property int collectedBytes: 0
+    property bool overflowed: false
+    property bool timedOut: false
+    property int cap: 1048576
+    stdout: SplitParser {
+      onRead: function (data) {
+        if (readProc.overflowed || readProc.timedOut)
+          return;
+        var chunk = String(data + "\n");
+        if (readProc.collectedBytes + chunk.length > readProc.cap) {
+          readProc.overflowed = true;
+          readProc.collected = "";
+          readProc.collectedBytes = 0;
+          root.killProc(readProc);
+          return;
+        }
+        readProc.collected += chunk;
+        readProc.collectedBytes += chunk.length;
+      }
+    }
+    stderr: SplitParser {
+      onRead: function (data) {
+        if (readProc.overflowed || readProc.timedOut)
+          return;
+        readProc.collectedBytes += String(data + "\n").length;
+        if (readProc.collectedBytes > readProc.cap) {
+          readProc.overflowed = true;
+          readProc.collected = "";
+          readProc.collectedBytes = 0;
+          root.killProc(readProc);
+        }
+      }
+    }
+    onExited: function (exitCode) {
+      readWatchdog.stop();
+      var ok = !readProc.overflowed && !readProc.timedOut && exitCode === 0;
+      var output = String(readProc.collected);
+      readProc.collected = "";
+      readProc.collectedBytes = 0;
+      readProc.overflowed = false;
+      readProc.timedOut = false;
+      var stage = root.readStage;
+      if (root.readQueue.length > 0)
+        root.readQueue.shift();
+      root.applyRead(stage, ok, output);
+      root.nextRead();
+    }
+  }
+
   readonly property string detectScriptPath: Qt.resolvedUrl("scripts/detect-url-mpri").toString().replace(/^file:\/\//, "")
   readonly property string autoDownloadScriptPath: Qt.resolvedUrl("scripts/auto-download.sh").toString().replace(/^file:\/\//, "")
 
@@ -237,26 +371,6 @@ Item {
 
   function persistHistory() {
     Quickshell.execDetached([root.saveHistoryPath, root.historyPath, root.historyToJSON()]);
-  }
-
-  FileView {
-    id: historyStateFile
-    path: root.historyPath
-    preload: true
-    printErrors: false
-    onLoaded: {
-      var text = String(this.text() || "").trim();
-      if (!text)
-        return;
-      try {
-        var parsed = JSON.parse(text);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          root.history = root.historyFromJSON(parsed);
-          root.historyUpdated();
-        }
-      } catch (e) {
-      }
-    }
   }
 
   function cleanUrl(url) {
@@ -1437,5 +1551,8 @@ Item {
     }
   }
 
-  Component.onCompleted: root.checkInstallation()
+  Component.onCompleted: {
+    root.checkInstallation();
+    root.loadPersistedState();
+  }
 }

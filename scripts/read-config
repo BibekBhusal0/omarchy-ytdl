@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Output at most <max-bytes> of a verified regular file.
+# Usage: read-config <file> <max-bytes>
+set -euo pipefail
+
+file="${1:?file required}"
+max="${2:?max bytes required}"
+
+[[ "$file" == /* ]] || exit 1
+[[ "$max" =~ ^[0-9]+$ ]] || exit 1
+(( max > 0 && max <= 1048576 )) || exit 1
+dir="${file%/*}"
+[[ "$dir" == /* ]] || exit 1
+[[ -d "$dir" ]] || exit 1
+[[ ! -L "$dir" ]] || exit 1
+[[ ! -L "$file" ]] || exit 1
+[[ -f "$file" ]] || exit 1
+size="$(/usr/bin/stat -c %s -- "$file")" || exit 1
+[[ "$size" =~ ^[0-9]+$ ]] || exit 1
+(( size <= max )) || exit 1
+/usr/bin/head -c "$max" -- "$file"
