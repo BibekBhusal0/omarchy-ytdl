@@ -13,9 +13,28 @@ dir="${file%/*}"
 [[ "$dir" == /* ]] || exit 1
 [[ -d "$dir" ]] || exit 1
 [[ ! -L "$dir" ]] || exit 1
-[[ ! -L "$file" ]] || exit 1
-[[ -f "$file" ]] || exit 1
-size="$(/usr/bin/stat -c %s -- "$file")" || exit 1
-[[ "$size" =~ ^[0-9]+$ ]] || exit 1
-(( size <= max )) || exit 1
-/usr/bin/head -c "$max" -- "$file"
+exec /usr/bin/python3 - "$file" "$max" <<'EOF'
+import os
+import stat as statmod
+import sys
+
+path, max_bytes = sys.argv[1], int(sys.argv[2])
+try:
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+except OSError:
+    sys.exit(1)
+try:
+    if not statmod.S_ISREG(os.fstat(fd).st_mode):
+        sys.exit(1)
+    data = b""
+    while len(data) <= max_bytes:
+        chunk = os.read(fd, min(65536, max_bytes + 1 - len(data)))
+        if not chunk:
+            break
+        data += chunk
+    if len(data) > max_bytes:
+        sys.exit(1)
+    os.write(1, data)
+finally:
+    os.close(fd)
+EOF
