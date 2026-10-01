@@ -749,6 +749,7 @@ Panel {
                 Text {
                   width: parent.width
                   text: ytdlService ? (ytdlService.detectedTitle || ytdlService.detectedUrl) : ""
+                  textFormat: Text.PlainText
                   color: Qt.darker(root.foreground, 1.4)
                   font.family: root.fontFamily
                   font.pixelSize: Style.font.caption
@@ -813,6 +814,7 @@ Panel {
                 Text {
                   width: parent.width
                   text: ytdlService ? (ytdlService.playlistInfoLoading ? "Resolving playlist\u2026" : ytdlService.playlistInfoError ? "Could not resolve playlist" : ytdlService.playlistInfoName ? ytdlService.playlistInfoName + " \u00b7 " + ytdlService.playlistInfoCount + (ytdlService.playlistInfoCount === 1 ? " video" : " videos") : "") : ""
+                  textFormat: Text.PlainText
                   color: Qt.darker(root.foreground, 1.4)
                   font.family: root.fontFamily
                   font.pixelSize: Style.font.caption
@@ -924,6 +926,7 @@ Panel {
                     Text {
                       Layout.fillWidth: true
                       text: modelData.displayTitle || modelData.title || "Fetching title\u2026"
+                      textFormat: Text.PlainText
                       color: root.foreground
                       font.family: root.fontFamily
                       font.pixelSize: Style.font.bodySmall
@@ -1075,6 +1078,7 @@ Panel {
                     Text {
                       width: parent.width
                       text: modelData.displayTitle || modelData.title || "Unknown"
+                      textFormat: Text.PlainText
                       color: root.foreground
                       font.family: root.fontFamily
                       font.pixelSize: Style.font.bodySmall
@@ -1224,6 +1228,7 @@ Panel {
                     Text {
                       width: parent.width
                       text: modelData.displayTitle || modelData.title || "Unknown"
+                      textFormat: Text.PlainText
                       color: root.foreground
                       font.family: root.fontFamily
                       font.pixelSize: Style.font.bodySmall
@@ -1245,6 +1250,7 @@ Panel {
                           return "Cancelled";
                         return modelData.status;
                       }
+                      textFormat: Text.PlainText
                       color: Qt.darker(root.foreground, 1.4)
                       font.family: root.fontFamily
                       font.pixelSize: Style.font.caption

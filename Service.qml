@@ -556,6 +556,14 @@ Item {
     }
   }
 
+  // Remote playlist titles must never become path components verbatim:
+  // collapse to one safe folder name so the output stays inside the
+  // download directory and carries no yt-dlp template characters.
+  function safeFolderName(name) {
+    var s = String(name).replace(/[^A-Za-z0-9 _.\-()\[\]]/g, "_").replace(/^\.+/, "").slice(0, 100).replace(/[. ]+$/, "");
+    return s === "" ? "playlist" : s;
+  }
+
   function _spawnDownload(url, quality, downloadType, labelPrefix, isPlaylistItem, knownTitle, playlistName) {
     // Check if this specific format is already busy
     if (root.isUrlBusy(url, downloadType))
@@ -566,7 +574,7 @@ Item {
     var subLangs = transcriptLanguages;
     var outputTemplate = downloadLocation;
     if (playlistName && playlistInSeparateFolder) {
-      outputTemplate += "/" + playlistName;
+      outputTemplate += "/" + root.safeFolderName(playlistName);
     }
     // For audio-only downloads, add a suffix to prevent conflicts with video files
     // yt-dlp's -x flag extracts audio and deletes the intermediate video file
@@ -624,7 +632,7 @@ Item {
       var d = downloads[i];
       var outputTemplate = downloadLocation;
       if (d._playlistName && playlistInSeparateFolder) {
-        outputTemplate += "/" + d._playlistName;
+        outputTemplate += "/" + root.safeFolderName(d._playlistName);
       }
       // For audio-only downloads, add a suffix to prevent conflicts with video files
       if (d._downloadType === "audio") {
