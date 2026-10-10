@@ -1325,16 +1325,29 @@ Item {
 
   Process {
     id: clipboardProc
+    property int cap: 16384
+    property bool overflowed: false
     command: ["wl-paste", "--no-newline"]
     stdout: SplitParser {
       onRead: function (data) {
+        if (clipboardProc.overflowed)
+          return;
+        if (root._clipboardBuf.length + String(data).length > clipboardProc.cap) {
+          clipboardProc.overflowed = true;
+          root._clipboardBuf = "";
+          root.killProc(clipboardProc);
+          return;
+        }
         root._clipboardBuf += data;
       }
     }
     onExited: function (exitCode) {
       var cb = root._clipboardCallback;
       root._clipboardCallback = null;
-      if (exitCode !== 0) {
+      var overflowed = clipboardProc.overflowed;
+      clipboardProc.overflowed = false;
+      if (overflowed || exitCode !== 0) {
+        root._clipboardBuf = "";
         if (cb)
           cb("");
         return;
