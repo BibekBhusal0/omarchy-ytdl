@@ -1,12 +1,13 @@
 import QtQuick
 import Quickshell
 import qs.Ui
+import "shared" as YtdlShared
 
 BarWidget {
   id: root
   moduleName: "bibek.ytdl"
 
-  readonly property var ytdlService: bar && bar.shell ? bar.shell.serviceFor(moduleName) : null
+  readonly property var ytdlService: (bar && bar.shell ? bar.shell.serviceFor(moduleName) : null) || YtdlShared.ServiceBridge.service
 
   readonly property bool opened: panelLoader.item ? panelLoader.item.opened === true : false
 

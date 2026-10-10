@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import "shared" as YtdlShared
 
 Item {
   id: root
@@ -1560,7 +1561,12 @@ Item {
   }
 
   Component.onCompleted: {
+    YtdlShared.ServiceBridge.service = root;
     root.checkInstallation();
     root.loadPersistedState();
+  }
+  Component.onDestruction: {
+    if (YtdlShared.ServiceBridge.service === root)
+      YtdlShared.ServiceBridge.service = null;
   }
 }
