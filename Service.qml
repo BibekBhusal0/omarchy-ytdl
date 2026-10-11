@@ -88,6 +88,7 @@ Item {
   readonly property string saveScriptPath: Qt.resolvedUrl("scripts/save-setting").toString().replace(/^file:\/\//, "")
   readonly property string saveHistoryPath: Qt.resolvedUrl("scripts/save-history").toString().replace(/^file:\/\//, "")
   readonly property string readScriptPath: Qt.resolvedUrl("scripts/read-config").toString().replace(/^file:\/\//, "")
+  readonly property string readClipboardScriptPath: Qt.resolvedUrl("scripts/read-clipboard").toString().replace(/^file:\/\//, "")
   property int maxConfigBytes: 65536
   property int maxHistoryBytes: 1048576
   property int configTimeoutMs: 5000
@@ -1325,9 +1326,9 @@ Item {
 
   Process {
     id: clipboardProc
-    property int cap: 16384
+    property int cap: 2048
     property bool overflowed: false
-    command: ["wl-paste", "--no-newline"]
+    command: [root.readClipboardScriptPath, String(cap)]
     stdout: SplitParser {
       onRead: function (data) {
         if (clipboardProc.overflowed)

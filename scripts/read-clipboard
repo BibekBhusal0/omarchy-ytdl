@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# Output at most <max-bytes> of the Wayland clipboard; exit 1 when larger.
+# Usage: read-clipboard <max-bytes>
+set -euo pipefail
+
+max="${1:?max bytes required}"
+[[ "$max" =~ ^[0-9]+$ ]] || exit 1
+(( max > 0 && max <= 1048576 )) || exit 1
+exec /usr/bin/python3 - "$max" <<'EOF'
+import subprocess
+import sys
+
+max_bytes = int(sys.argv[1])
+proc = subprocess.Popen(["/usr/bin/wl-paste", "--no-newline"],
+                        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+data = b""
+try:
+    while len(data) <= max_bytes:
+        chunk = proc.stdout.read(min(65536, max_bytes + 1 - len(data)))
+        if not chunk:
+            break
+        data += chunk
+finally:
+    proc.kill()
+    proc.wait()
+if len(data) > max_bytes:
+    sys.exit(1)
+sys.stdout.buffer.write(data)
+EOF
