@@ -173,6 +173,15 @@ Panel {
       });
   }
 
+  function pastePrimary() {
+    if (!ytdlService)
+      return;
+    ytdlService.readPrimaryText(function (text) {
+        if (text)
+          urlInput.insert(urlInput.cursorPosition, text);
+      });
+  }
+
   function submitUrl() {
     if (!ytdlService || !inputUrl)
       return;
@@ -679,6 +688,11 @@ Panel {
                     event.accepted = true;
                     root.pasteBounded();
                   }
+                }
+                MouseArea {
+                  anchors.fill: parent
+                  acceptedButtons: Qt.MiddleButton
+                  onClicked: root.pastePrimary()
                 }
               }
 

@@ -10,7 +10,7 @@ is_youtube_url() {
 }
 
 # Detect URL from MPRIS first
-DETECTED=$("$SCRIPT_DIR/detect-url-mpri" | head -1)
+DETECTED=$("$SCRIPT_DIR/detect-url-mpri" 2>/dev/null | head -c 65536 | head -1)
 URL=$(echo "$DETECTED" | jq -r '.url // empty' 2>/dev/null)
 TITLE=$(echo "$DETECTED" | jq -r '.title // empty' 2>/dev/null)
 SOURCE="browser"
@@ -18,7 +18,7 @@ SOURCE="browser"
 # Fallback: check clipboard
 if [ -z "$URL" ]; then
     SOURCE="clipboard"
-    CLIP=$(wl-paste --no-newline 2>/dev/null)
+    CLIP=$("$SCRIPT_DIR/read-clipboard" 2048 2>/dev/null)
     if [ -n "$CLIP" ] && is_youtube_url "$CLIP"; then
         URL=$(echo "$CLIP" | grep -o 'https\?://[^\s]*')
     fi
@@ -31,7 +31,7 @@ fi
 
 # Clipboard URLs have no title yet; fetch it from yt-dlp
 if [ -z "$TITLE" ] || [ "$TITLE" = "null" ]; then
-    TITLE=$(yt-dlp --no-download --print "%(title)s" --skip-download "$URL" 2>/dev/null | head -1)
+    TITLE=$(yt-dlp --no-download --print "%(title)s" --skip-download "$URL" 2>/dev/null | head -c 4096 | head -1)
 fi
 
 # Get current ytdl state to check if video is already busy

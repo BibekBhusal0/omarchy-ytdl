@@ -14,6 +14,7 @@ Item {
   property bool installing: false
   property string clipboardUrl: ""
   property var _clipboardCallback: null
+  property bool _clipboardRaw: false
 
   // MPRIS auto-detection state. When a browser is playing a YouTube video,
   // detectYouTube() populates these so the panel can offer a one-click download.
@@ -1321,15 +1322,20 @@ Item {
   }
 
   function readClipboardText(callback) {
-    root._startClipboardRead(callback, true);
+    root._startClipboardRead(callback, true, "");
   }
 
-  function _startClipboardRead(callback, raw) {
+  function readPrimaryText(callback) {
+    root._startClipboardRead(callback, true, "primary");
+  }
+
+  function _startClipboardRead(callback, raw, source) {
     if (clipboardProc.running)
       return;
     root._clipboardBuf = "";
     root._clipboardRaw = !!raw;
     root._clipboardCallback = callback;
+    clipboardProc.command = source === "primary" ? [root.readClipboardScriptPath, String(clipboardProc.cap), "primary"] : [root.readClipboardScriptPath, String(clipboardProc.cap)];
     clipboardProc.running = true;
   }
 

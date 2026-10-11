@@ -48,10 +48,11 @@ Flickable {
       cursorMoveRequested(i);
   }
 
-  function pasteBounded(field) {
+  function pasteBounded(field, primary) {
     if (!ytdlService)
       return;
-    ytdlService.readClipboardText(function (text) {
+    var fetch = primary ? ytdlService.readPrimaryText : ytdlService.readClipboardText;
+    fetch(function (text) {
         if (text)
           field.insert(field.cursorPosition, text);
       });
@@ -260,6 +261,11 @@ Flickable {
         Keys.onPressed: function (event) {
           root.interceptPaste(event, downloadPathInput);
         }
+        MouseArea {
+          anchors.fill: parent
+          acceptedButtons: Qt.MiddleButton
+          onClicked: root.pasteBounded(downloadPathInput, true)
+        }
       }
     }
 
@@ -317,6 +323,11 @@ Flickable {
         }
         Keys.onPressed: function (event) {
           root.interceptPaste(event, langInput);
+        }
+        MouseArea {
+          anchors.fill: parent
+          acceptedButtons: Qt.MiddleButton
+          onClicked: root.pasteBounded(langInput, true)
         }
       }
     }
