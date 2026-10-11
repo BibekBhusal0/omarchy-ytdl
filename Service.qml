@@ -1317,9 +1317,18 @@ Item {
   property string _clipboardBuf: ""
 
   function checkClipboard(callback) {
+    root._startClipboardRead(callback, false);
+  }
+
+  function readClipboardText(callback) {
+    root._startClipboardRead(callback, true);
+  }
+
+  function _startClipboardRead(callback, raw) {
     if (clipboardProc.running)
       return;
     root._clipboardBuf = "";
+    root._clipboardRaw = !!raw;
     root._clipboardCallback = callback;
     clipboardProc.running = true;
   }
@@ -1344,7 +1353,9 @@ Item {
     }
     onExited: function (exitCode) {
       var cb = root._clipboardCallback;
+      var raw = root._clipboardRaw;
       root._clipboardCallback = null;
+      root._clipboardRaw = false;
       var overflowed = clipboardProc.overflowed;
       clipboardProc.overflowed = false;
       if (overflowed || exitCode !== 0) {
@@ -1355,6 +1366,11 @@ Item {
       }
       var content = String(root._clipboardBuf || "").trim();
       root._clipboardBuf = "";
+      if (raw) {
+        if (cb)
+          cb(content);
+        return;
+      }
       var url = "";
       if (root.isYouTubeUrl(content)) {
         var cleaned = content.match(/(https?:\/\/[^\s]+)/);

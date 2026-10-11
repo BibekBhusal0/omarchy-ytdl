@@ -164,6 +164,15 @@ Panel {
       });
   }
 
+  function pasteBounded() {
+    if (!ytdlService)
+      return;
+    ytdlService.readClipboardText(function (text) {
+        if (text)
+          urlInput.insert(urlInput.cursorPosition, text);
+      });
+  }
+
   function submitUrl() {
     if (!ytdlService || !inputUrl)
       return;
@@ -663,6 +672,14 @@ Panel {
                   playlistInfoTimer.restart();
                 }
                 Keys.onEscapePressed: root.focusPanel()
+                Keys.onPressed: function (event) {
+                  var ctrlPaste = (event.modifiers & Qt.ControlModifier) !== 0 && event.key === Qt.Key_V;
+                  var shiftPaste = (event.modifiers & Qt.ShiftModifier) !== 0 && event.key === Qt.Key_Insert;
+                  if (ctrlPaste || shiftPaste) {
+                    event.accepted = true;
+                    root.pasteBounded();
+                  }
+                }
               }
 
               Button {

@@ -48,6 +48,24 @@ Flickable {
       cursorMoveRequested(i);
   }
 
+  function pasteBounded(field) {
+    if (!ytdlService)
+      return;
+    ytdlService.readClipboardText(function (text) {
+        if (text)
+          field.insert(field.cursorPosition, text);
+      });
+  }
+
+  function interceptPaste(event, field) {
+    var ctrlPaste = (event.modifiers & Qt.ControlModifier) !== 0 && event.key === Qt.Key_V;
+    var shiftPaste = (event.modifiers & Qt.ShiftModifier) !== 0 && event.key === Qt.Key_Insert;
+    if (ctrlPaste || shiftPaste) {
+      event.accepted = true;
+      root.pasteBounded(field);
+    }
+  }
+
   // Return the ordered list of visible settings controls for keyboard cursor indexing.
   readonly property var visibleItems: {
     var items = ["type"];
@@ -239,6 +257,9 @@ Flickable {
           downloadPathInput.focus = false;
           root.inputClosed();
         }
+        Keys.onPressed: function (event) {
+          root.interceptPaste(event, downloadPathInput);
+        }
       }
     }
 
@@ -293,6 +314,9 @@ Flickable {
         Keys.onEscapePressed: {
           langInput.focus = false;
           root.inputClosed();
+        }
+        Keys.onPressed: function (event) {
+          root.interceptPaste(event, langInput);
         }
       }
     }
