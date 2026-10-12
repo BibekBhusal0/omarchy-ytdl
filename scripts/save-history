@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 # Persist the ytdl history snapshot into its JSON state file.
-# Usage: save-history <state-file> <json-document>
+# Usage: save-history <state-file>
+# History JSON arrives on stdin as "<byte-count>\n<payload>" so URLs, titles
+# and paths never appear in the helper command line.
 set -euo pipefail
 
 file="${1:?state file required}"
-json="${2:?json document required}"
 
 [[ "$file" == /* ]] || exit 1
 dir="${file%/*}"
 [[ "$dir" == /* ]] || exit 1
 base="${file##*/}"
 [[ -n "$base" ]] || exit 1
-[[ "${#json}" -le 1048576 ]] || exit 1
 
 [[ -d "$dir" ]] || exit 1
 [[ ! -L "$dir" ]] || exit 1
@@ -19,6 +19,11 @@ base="${file##*/}"
 if [[ -e "$file" ]]; then
   [[ -f "$file" ]] || exit 1
 fi
+
+read -r count
+[[ "$count" =~ ^[0-9]+$ ]] || exit 1
+(( count > 0 && count <= 1048576 )) || exit 1
+json="$(/usr/bin/head -c "$count")"
 
 tmp=""
 cleanup() {

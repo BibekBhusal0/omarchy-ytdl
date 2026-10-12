@@ -372,8 +372,42 @@ Item {
     return out;
   }
 
+  // History payload waiting for the save helper; written on stdin so
+  // URLs, titles and paths never appear in a command line.
+  property string _historyPayload: ""
+  property string _historyPending: ""
+
   function persistHistory() {
-    Quickshell.execDetached([root.saveHistoryPath, root.historyPath, root.historyToJSON()]);
+    var payload = root.historyToJSON();
+    if (historySaveProc.running) {
+      root._historyPending = payload;
+      return;
+    }
+    root._historyPayload = payload;
+    historySaveProc.command = [root.saveHistoryPath, root.historyPath];
+    historySaveProc.running = true;
+  }
+
+  // UTF-8 byte count for the helper's length-prefixed stdin framing.
+  function _utf8Length(s) {
+    return unescape(encodeURIComponent(s)).length;
+  }
+
+  Process {
+    id: historySaveProc
+    stdinEnabled: true
+    onStarted: {
+      var payload = root._historyPayload;
+      root._historyPayload = "";
+      historySaveProc.write(String(root._utf8Length(payload)) + "\n" + payload);
+    }
+    onExited: {
+      if (root._historyPending !== "") {
+        root._historyPayload = root._historyPending;
+        root._historyPending = "";
+        historySaveProc.running = true;
+      }
+    }
   }
 
   function cleanUrl(url) {
