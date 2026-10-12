@@ -1076,19 +1076,34 @@ Item {
     id: titleProc
     property var targetId: -1
     property var _fetchId: -1
-    stdout: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: {
-        var title = String(this.text || "").trim();
-        if (title && titleProc.targetId !== -1 && titleProc.targetId === titleProc._fetchId) {
-          root.updateDownload(titleProc.targetId, {
-              "title": title
-            });
+    property int cap: 4096
+    property bool overflowed: false
+    property string _buf: ""
+    stdout: SplitParser {
+      onRead: function (data) {
+        if (titleProc.overflowed)
+          return;
+        if (titleProc._buf.length + String(data).length > titleProc.cap) {
+          titleProc.overflowed = true;
+          titleProc._buf = "";
+          root.killProc(titleProc);
+          return;
         }
-        titleProc.targetId = -1;
-        titleProc._fetchId = -1;
-        Qt.callLater(root._pumpTitle);
+        titleProc._buf += data;
       }
+    }
+    onExited: {
+      var title = titleProc.overflowed ? "" : String(titleProc._buf || "").trim();
+      titleProc._buf = "";
+      titleProc.overflowed = false;
+      if (title && titleProc.targetId !== -1 && titleProc.targetId === titleProc._fetchId) {
+        root.updateDownload(titleProc.targetId, {
+            "title": title
+          });
+      }
+      titleProc.targetId = -1;
+      titleProc._fetchId = -1;
+      Qt.callLater(root._pumpTitle);
     }
   }
 
@@ -1130,29 +1145,37 @@ Item {
   Process {
     id: playlistInfoProc
     property int _req: -1
-    stdout: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: {
-        if (playlistInfoProc._req !== root._playlistInfoReq)
+    property int cap: 4096
+    property bool overflowed: false
+    property string _buf: ""
+    stdout: SplitParser {
+      onRead: function (data) {
+        if (playlistInfoProc.overflowed)
           return;
-        var parts = String(this.text || "").trim().split("\t");
-        if (parts.length >= 2 && parts[0]) {
-          root.playlistInfoName = parts[0];
-          root.playlistInfoCount = parseInt(parts[1], 10) || 0;
-          root.playlistInfoError = false;
-        } else {
-          root.playlistInfoError = true;
+        if (playlistInfoProc._buf.length + String(data).length > playlistInfoProc.cap) {
+          playlistInfoProc.overflowed = true;
+          playlistInfoProc._buf = "";
+          root.killProc(playlistInfoProc);
+          return;
         }
-        root.playlistInfoLoading = false;
+        playlistInfoProc._buf += data;
       }
     }
     onExited: function (exitCode) {
       if (playlistInfoProc._req !== root._playlistInfoReq)
         return;
-      if (exitCode !== 0) {
+      var failed = playlistInfoProc.overflowed || exitCode !== 0;
+      var parts = failed ? [] : String(playlistInfoProc._buf || "").trim().split("\t");
+      playlistInfoProc._buf = "";
+      playlistInfoProc.overflowed = false;
+      if (!failed && parts.length >= 2 && parts[0]) {
+        root.playlistInfoName = parts[0];
+        root.playlistInfoCount = parseInt(parts[1], 10) || 0;
+        root.playlistInfoError = false;
+      } else {
         root.playlistInfoError = true;
-        root.playlistInfoLoading = false;
       }
+      root.playlistInfoLoading = false;
     }
   }
 
@@ -1162,59 +1185,74 @@ Item {
     id: playlistProc
     property var downloadId: -1
     property string _errBuf: ""
-    stdout: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: {
-        var id = playlistProc.downloadId;
-        playlistProc.downloadId = -1;
-        if (id === -1)
+    property int cap: 1048576
+    property bool overflowed: false
+    property string _buf: ""
+    stdout: SplitParser {
+      onRead: function (data) {
+        if (playlistProc.overflowed)
           return;
-        var items = [];
-        var text = String(this.text || "").trim();
-        if (text) {
-          try {
-            var parsed = JSON.parse(text);
-            if (Array.isArray(parsed)) {
-              for (var i = 0; i < parsed.length; i++) {
-                var it = parsed[i] || {};
-                if (it.url) {
-                  items.push({
-                      "url": it.url,
-                      "title": it.title || "",
-                      "quality": root._playlistQuality,
-                      "playlistTitle": it.playlistTitle || ""
-                    });
-                }
+        if (playlistProc._buf.length + String(data).length > playlistProc.cap) {
+          playlistProc.overflowed = true;
+          playlistProc._buf = "";
+          root.killProc(playlistProc);
+          return;
+        }
+        playlistProc._buf += data;
+      }
+    }
+    onExited: {
+      var id = playlistProc.downloadId;
+      playlistProc.downloadId = -1;
+      if (id === -1)
+        return;
+      var items = [];
+      var text = playlistProc.overflowed ? "" : String(playlistProc._buf || "").trim();
+      playlistProc._buf = "";
+      playlistProc.overflowed = false;
+      if (text) {
+        try {
+          var parsed = JSON.parse(text);
+          if (Array.isArray(parsed)) {
+            for (var i = 0; i < parsed.length; i++) {
+              var it = parsed[i] || {};
+              if (it.url) {
+                items.push({
+                    "url": it.url,
+                    "title": it.title || "",
+                    "quality": root._playlistQuality,
+                    "playlistTitle": it.playlistTitle || ""
+                  });
               }
             }
-          } catch (e) {
           }
+        } catch (e) {
         }
-        if (items.length === 0) {
-          // Resolution failed; surface the error on the placeholder entry.
-          var err = root._playlistError || "Could not resolve playlist";
-          for (var j = 0; j < root.downloads.length; j++) {
-            var d = root.downloads[j];
-            if (d.dwnId === id) {
-              d.status = "error";
-              d.error = err;
-              root.downloads = root.removeById(root.downloads, id);
-              if (root.enableHistory) {
-                root.history = [d].concat(root.history);
-                root.persistHistory();
-              }
-              root.historyUpdated();
-              root.downloadsUpdated();
-              break;
+      }
+      if (items.length === 0) {
+        // Resolution failed; surface the error on the placeholder entry.
+        var err = root._playlistError || "Could not resolve playlist";
+        for (var j = 0; j < root.downloads.length; j++) {
+          var d = root.downloads[j];
+          if (d.dwnId === id) {
+            d.status = "error";
+            d.error = err;
+            root.downloads = root.removeById(root.downloads, id);
+            if (root.enableHistory) {
+              root.history = [d].concat(root.history);
+              root.persistHistory();
             }
+            root.historyUpdated();
+            root.downloadsUpdated();
+            break;
           }
-        } else {
-          root.downloads = root.removeById(root.downloads, id);
-          root.downloadsUpdated();
-          var playlistName = items.length > 0 && items[0].playlistTitle ? items[0].playlistTitle : "";
-          for (var k = 0; k < items.length; k++)
-            root.startDownload(items[k].url, items[k].quality, true, items[k].title, root._playlistDownloadType, playlistName);
         }
+      } else {
+        root.downloads = root.removeById(root.downloads, id);
+        root.downloadsUpdated();
+        var playlistName = items.length > 0 && items[0].playlistTitle ? items[0].playlistTitle : "";
+        for (var k = 0; k < items.length; k++)
+          root.startDownload(items[k].url, items[k].quality, true, items[k].title, root._playlistDownloadType, playlistName);
       }
     }
     stderr: SplitParser {
