@@ -9,10 +9,14 @@ max="${1:?max bytes required}"
 mode="${2:-clipboard}"
 [[ "$mode" == "clipboard" || "$mode" == "primary" ]] || exit 1
 exec /usr/bin/python3 - "$max" "$mode" <<'EOF'
+import select
 import subprocess
 import sys
+import time
 
 max_bytes = int(sys.argv[1])
+# Deadline: a trickling owner could hold the pipe open forever.
+deadline = time.monotonic() + 10
 cmd = ["/usr/bin/wl-paste", "--no-newline"]
 if sys.argv[2] == "primary":
     cmd.append("--primary")
@@ -20,6 +24,12 @@ proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
 data = b""
 try:
     while len(data) <= max_bytes:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            sys.exit(1)
+        ready, _, _ = select.select([proc.stdout], [], [], remaining)
+        if not ready:
+            sys.exit(1)
         chunk = proc.stdout.read(min(65536, max_bytes + 1 - len(data)))
         if not chunk:
             break

@@ -164,12 +164,19 @@ Panel {
       });
   }
 
+  function insertBounded(field, text) {
+    var clean = String(text).replace(/[\r\n]+/g, "");
+    var pos = field.cursorPosition;
+    field.text = field.text.slice(0, pos) + clean + field.text.slice(pos);
+    field.cursorPosition = pos + clean.length;
+  }
+
   function pasteBounded() {
     if (!ytdlService)
       return;
     ytdlService.readClipboardText(function (text) {
         if (text)
-          urlInput.insert(urlInput.cursorPosition, text);
+          root.insertBounded(urlInput, text);
       });
   }
 
@@ -178,7 +185,7 @@ Panel {
       return;
     ytdlService.readPrimaryText(function (text) {
         if (text)
-          urlInput.insert(urlInput.cursorPosition, text);
+          root.insertBounded(urlInput, text);
       });
   }
 
@@ -218,7 +225,7 @@ Panel {
   function focusPanel() {
     keyCatcher.forceActiveFocus();
     if (urlInput)
-      urlInput.focus = false;
+      urlInput.clearFocus();
   }
 
   function sectionList() {
@@ -661,7 +668,7 @@ Panel {
               width: parent.width
               spacing: Style.space(8)
 
-              TextField {
+              SingleLineEdit {
                 id: urlInput
                 Layout.fillWidth: true
                 height: Style.space(36)
@@ -672,6 +679,12 @@ Panel {
                 accent: root.activeColor
                 hasCursor: root.cursorActive && root.focusSection === "input" && root.selectedIndex === 0
                 onAccepted: root.submitUrl()
+                onPasteRequested: function (primary) {
+                  if (primary)
+                    root.pastePrimary();
+                  else
+                    root.pasteBounded();
+                }
                 onHoveredChanged: if (hovered)
                   root.focusSectionAt("input", 0)
                 onTextChanged: {
@@ -681,19 +694,6 @@ Panel {
                   playlistInfoTimer.restart();
                 }
                 Keys.onEscapePressed: root.focusPanel()
-                Keys.onPressed: function (event) {
-                  var ctrlPaste = (event.modifiers & Qt.ControlModifier) !== 0 && event.key === Qt.Key_V;
-                  var shiftPaste = (event.modifiers & Qt.ShiftModifier) !== 0 && event.key === Qt.Key_Insert;
-                  if (ctrlPaste || shiftPaste) {
-                    event.accepted = true;
-                    root.pasteBounded();
-                  }
-                }
-                MouseArea {
-                  anchors.fill: parent
-                  acceptedButtons: Qt.MiddleButton
-                  onClicked: root.pastePrimary()
-                }
               }
 
               Button {

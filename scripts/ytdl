@@ -176,8 +176,8 @@ case "$CMD" in
     SUB_LANGS="$4"
     OUTPUT="$5"
     COOKIE_BROWSER="$6"
-    shift 6
     EXTRA="$7"
+    shift 6
 
     # Format selection uses pre-merged formats to avoid FFmpeg merge issues.
     # Format strings use b[height<=X]/b which selects best pre-merged format

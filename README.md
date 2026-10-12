@@ -128,6 +128,8 @@ Download and panel logic based on the [omarchy-aria2](https://github.com/rawritu
 
 Cookie export follows the [yt-dlp docs on exporting YouTube cookies](https://github.com/yt-dlp/yt-dlp/wiki/Extractors#exporting-youtube-cookies) (Unlicense).
 
+The single-line TextEdit editor approach follows [Omarchyform's LineField](https://github.com/thepixelgardener-create/omarchyform) (MIT).
+
 This plugin is licensed under the [MIT License](LICENSE).
 
 ## Others

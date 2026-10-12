@@ -53,18 +53,13 @@ Flickable {
       return;
     var fetch = primary ? ytdlService.readPrimaryText : ytdlService.readClipboardText;
     fetch(function (text) {
-        if (text)
-          field.insert(field.cursorPosition, text);
+        if (text) {
+          var clean = String(text).replace(/[\r\n]+/g, "");
+          var pos = field.cursorPosition;
+          field.text = field.text.slice(0, pos) + clean + field.text.slice(pos);
+          field.cursorPosition = pos + clean.length;
+        }
       });
-  }
-
-  function interceptPaste(event, field) {
-    var ctrlPaste = (event.modifiers & Qt.ControlModifier) !== 0 && event.key === Qt.Key_V;
-    var shiftPaste = (event.modifiers & Qt.ShiftModifier) !== 0 && event.key === Qt.Key_Insert;
-    if (ctrlPaste || shiftPaste) {
-      event.accepted = true;
-      root.pasteBounded(field);
-    }
   }
 
   // Return the ordered list of visible settings controls for keyboard cursor indexing.
@@ -239,7 +234,7 @@ Flickable {
         font.bold: true
       }
 
-      TextField {
+      SingleLineEdit {
         id: downloadPathInput
         width: parent.width
         height: Style.spacing.controlHeight
@@ -251,20 +246,15 @@ Flickable {
         onAccepted: {
           if (ytdlService && text.trim())
             ytdlService.updateSetting("downloadLocation", text.trim());
-          downloadPathInput.focus = false;
+          downloadPathInput.clearFocus();
           root.inputClosed();
         }
         Keys.onEscapePressed: {
-          downloadPathInput.focus = false;
+          downloadPathInput.clearFocus();
           root.inputClosed();
         }
-        Keys.onPressed: function (event) {
-          root.interceptPaste(event, downloadPathInput);
-        }
-        MouseArea {
-          anchors.fill: parent
-          acceptedButtons: Qt.MiddleButton
-          onClicked: root.pasteBounded(downloadPathInput, true)
+        onPasteRequested: function (primary) {
+          root.pasteBounded(downloadPathInput, primary);
         }
       }
     }
@@ -302,7 +292,7 @@ Flickable {
         font.bold: true
       }
 
-      TextField {
+      SingleLineEdit {
         id: langInput
         width: parent.width
         height: Style.spacing.controlHeight
@@ -314,20 +304,15 @@ Flickable {
         onAccepted: {
           if (ytdlService)
             ytdlService.updateSetting("transcriptLanguages", text);
-          langInput.focus = false;
+          langInput.clearFocus();
           root.inputClosed();
         }
         Keys.onEscapePressed: {
-          langInput.focus = false;
+          langInput.clearFocus();
           root.inputClosed();
         }
-        Keys.onPressed: function (event) {
-          root.interceptPaste(event, langInput);
-        }
-        MouseArea {
-          anchors.fill: parent
-          acceptedButtons: Qt.MiddleButton
-          onClicked: root.pasteBounded(langInput, true)
+        onPasteRequested: function (primary) {
+          root.pasteBounded(langInput, primary);
         }
       }
     }
