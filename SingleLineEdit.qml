@@ -74,12 +74,7 @@ FocusScope {
       }
 
       Keys.onPressed: function (event) {
-        if ((event.modifiers & Qt.ControlModifier) !== 0 && event.key === Qt.Key_V) {
-          event.accepted = true;
-          root.pasteRequested(false);
-          return;
-        }
-        if ((event.modifiers & Qt.ShiftModifier) !== 0 && event.key === Qt.Key_Insert) {
+        if (event.matches(StandardKey.Paste)) {
           event.accepted = true;
           root.pasteRequested(false);
           return;
