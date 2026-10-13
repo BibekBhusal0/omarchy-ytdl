@@ -104,6 +104,9 @@ If yt-dlp fails with "Sign in to confirm you're not a bot", log into YouTube in 
 
 For fine-grained control, set `extraArgs` directly (e.g. `--cookies-from-browser chromium`).
 
+By default, audio is saved using [Opus](https://opus-codec.org/) file format, if you prefer MP3 because you export to an external device, set `"extraArgs": "--audio-format mp3"`.
+
+
 ## Troubleshooting
 
 If a download fails, test yt-dlp directly in the terminal first:
