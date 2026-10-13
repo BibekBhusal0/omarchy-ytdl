@@ -239,8 +239,9 @@ case "$CMD" in
     URL="$1"
     COOKIE_BROWSER="$2"
     EXTRA="$3"
+    # Cap producer output so oversized bytes never reach the shell.
     # shellcheck disable=SC2086
-    run_with_retry --no-playlist --print "%(title)s" --no-warnings $EXTRA "$URL"
+    run_with_retry --no-playlist --print "%(title)s" --no-warnings $EXTRA "$URL" | /usr/bin/head -c 4097
     ;;
 
   playlist-items)
@@ -248,11 +249,12 @@ case "$CMD" in
     COOKIE_BROWSER="$2"
     EXTRA="$3"
     # Flat-resolve the playlist to id/title/url/playlistTitle so the service can queue each
-    # video as its own sequential download.
+    # video as its own sequential download. Producer output is capped so
+    # oversized bytes never reach the shell.
     # shellcheck disable=SC2086
     run_with_retry --flat-playlist --print "$(printf '%s\t%s\t%s\t%s' '%(id)s' '%(title)s' '%(url)s' '%(playlist_title)s')" $EXTRA "$URL" |
       jq -R 'split("\t") | select(length == 4) | {id: .[0], title: .[1], url: .[2], playlistTitle: .[3]}' |
-      jq -sc .
+      jq -sc . | /usr/bin/head -c 1048577
     ;;
 
   playlist-info)
@@ -261,9 +263,10 @@ case "$CMD" in
     EXTRA="$3"
     # Print "<playlist title>\t<video count>" for the "Playlist detected" panel
     # preview. --playlist-items 1 limits this to a single metadata request.
+    # Producer output is capped so oversized bytes never reach the shell.
     # shellcheck disable=SC2086
     run_with_retry --flat-playlist --playlist-items 1 \
-      --print "$(printf '%s\t%s' '%(playlist_title)s' '%(playlist_count)s')" $EXTRA "$URL"
+      --print "$(printf '%s\t%s' '%(playlist_title)s' '%(playlist_count)s')" $EXTRA "$URL" | /usr/bin/head -c 4097
     ;;
     
 check)
