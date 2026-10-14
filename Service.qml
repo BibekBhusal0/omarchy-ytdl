@@ -896,12 +896,28 @@ Item {
 
   Process {
     id: pruneProc
-    stdout: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: {
-        var text = String(this.text || "").trim();
-        if (!text)
+    property int cap: 1048576
+    property bool overflowed: false
+    property string _buf: ""
+    stdout: SplitParser {
+      onRead: function (data) {
+        if (pruneProc.overflowed)
           return;
+        if (pruneProc._buf.length + String(data).length > pruneProc.cap) {
+          pruneProc.overflowed = true;
+          pruneProc._buf = "";
+          root.killProc(pruneProc);
+          return;
+        }
+        pruneProc._buf += data;
+      }
+    }
+    onExited: {
+      var text = pruneProc.overflowed ? "" : String(pruneProc._buf || "").trim();
+      pruneProc._buf = "";
+      pruneProc.overflowed = false;
+      if (!text)
+        return;
         try {
           var missing = JSON.parse(text);
           if (!Array.isArray(missing) || missing.length === 0)
@@ -927,7 +943,6 @@ Item {
         } catch (e) {
         }
       }
-    }
   }
 
   function removeById(arr, id) {

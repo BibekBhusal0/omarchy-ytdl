@@ -24,11 +24,11 @@ busctl --user list 2>/dev/null | grep "org.mpris.MediaPlayer2\." | while read -r
     echo "$raw" | grep -q '"Metadata"' || continue
 
     # busctl escapes non-ASCII as octal (\360...); \0nnn form decodes via printf %b
-    title=$(echo "$raw" | grep -o '"xesam:title" s "[^"]*"' | sed 's/"xesam:title" s "//;s/\\342\\200\\231/'"'"'/g;s/"$//')
+    title=$(echo "$raw" | grep -o '"xesam:title" s "[^"]*"' | sed 's/"xesam:title" s "//;s/\\342\\200\\231/'"'"'/g;s/"$//' | /usr/bin/cut -c1-1024)
     [ -z "$title" ] && continue
 
     # Method 1: Check if xesam:url is a YouTube URL (Firefox/Zen give this)
-    url=$(echo "$raw" | grep -o '"xesam:url" s "[^"]*"' | sed 's/"xesam:url" s "//;s/"$//')
+    url=$(echo "$raw" | grep -o '"xesam:url" s "[^"]*"' | sed 's/"xesam:url" s "//;s/"$//' | /usr/bin/cut -c1-1024)
     if [ -n "$url" ] && is_youtube_url "$url"; then
         output_json "$title" "$url"
         continue

@@ -134,10 +134,14 @@ needs_cookies() {
 # Stdout (title, progress lines) passes through live so the shell can stream
 # progress; stderr is captured to a temp file and shown only on failure.
 # PYTHONUNBUFFERED keeps yt-dlp's line output from being pipe-block-buffered.
+# Every stdout line is truncated: the shell parses line by line, so no single
+# line may arrive unbounded. The rc file preserves yt-dlp's exit status
+# past the truncation pipe.
 run_with_retry() {
   ERRL="$(mktemp)"
-  PYTHONUNBUFFERED=1 yt-dlp "$@" 2>"$ERRL"
-  RC=$?
+  RCF="$(mktemp)"
+  (PYTHONUNBUFFERED=1 yt-dlp "$@"; echo "$?" >"$RCF") 2>"$ERRL" | /usr/bin/cut -c1-4096
+  RC="$(cat "$RCF")"
   if needs_cookies "$RC" "$ERRL"; then
     CF="$(mktemp)"
     cookies_flag "$COOKIE_BROWSER" >"$CF"
@@ -145,10 +149,11 @@ run_with_retry() {
     rm -f "$CF"
     if [ -n "$COOKIES" ]; then
       # shellcheck disable=SC2086
-      PYTHONUNBUFFERED=1 yt-dlp $COOKIES "$@" 2>"$ERRL"
-      RC=$?
+      (PYTHONUNBUFFERED=1 yt-dlp $COOKIES "$@"; echo "$?" >"$RCF") 2>"$ERRL" | /usr/bin/cut -c1-4096
+      RC="$(cat "$RCF")"
     fi
   fi
+  rm -f "$RCF"
   if [ "$RC" -ne 0 ]; then
     /usr/bin/tail -c 4096 -- "$ERRL"
   fi
@@ -239,9 +244,8 @@ case "$CMD" in
     URL="$1"
     COOKIE_BROWSER="$2"
     EXTRA="$3"
-    # Cap producer output so oversized bytes never reach the shell.
     # shellcheck disable=SC2086
-    run_with_retry --no-playlist --print "%(title)s" --no-warnings $EXTRA "$URL" | /usr/bin/head -c 4097
+    run_with_retry --no-playlist --print "%(title)s" --no-warnings $EXTRA "$URL"
     ;;
 
   playlist-items)
@@ -263,10 +267,9 @@ case "$CMD" in
     EXTRA="$3"
     # Print "<playlist title>\t<video count>" for the "Playlist detected" panel
     # preview. --playlist-items 1 limits this to a single metadata request.
-    # Producer output is capped so oversized bytes never reach the shell.
     # shellcheck disable=SC2086
     run_with_retry --flat-playlist --playlist-items 1 \
-      --print "$(printf '%s\t%s' '%(playlist_title)s' '%(playlist_count)s')" $EXTRA "$URL" | /usr/bin/head -c 4097
+      --print "$(printf '%s\t%s' '%(playlist_title)s' '%(playlist_count)s')" $EXTRA "$URL"
     ;;
     
 check)
