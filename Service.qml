@@ -98,6 +98,14 @@ Item {
   property string configRaw: ""
   property string historyRaw: ""
 
+  // Tail-keeping error buffer: failures report at the end of a run.
+  function appendErr(proc, line) {
+    var buf = String(proc._errBuf || "") + line + "\n";
+    if (buf.length > 65536)
+      buf = buf.slice(-65536);
+    proc._errBuf = buf;
+  }
+
   function killProc(proc) {
     try {
       proc.signal(9);
@@ -986,6 +994,9 @@ Item {
     line = String(line || "").trim();
     if (!line)
       return;
+    // Parser-buffered lines can be arbitrarily long; nothing parsed needs more.
+    if (line.length > 4096)
+      line = line.slice(0, 4096);
     var id = proc.downloadId;
 
     // Subs-only runs relay each written subtitle file; seeing one flips the
@@ -1257,7 +1268,7 @@ Item {
     }
     stderr: SplitParser {
       onRead: function (line) {
-        playlistProc._errBuf += line + "\n";
+        root.appendErr(playlistProc, line);
         if (line.indexOf("ERROR") !== -1)
           root._playlistError = line.replace(/^ERROR:\s*/, "");
       }
@@ -1278,7 +1289,7 @@ Item {
     }
     stderr: SplitParser {
       onRead: function (line) {
-        dlProc0._errBuf += line + "\n";
+        root.appendErr(dlProc0, line);
       }
     }
     onExited: function (exitCode) {
@@ -1316,7 +1327,7 @@ Item {
     }
     stderr: SplitParser {
       onRead: function (line) {
-        dlProc1._errBuf += line + "\n";
+        root.appendErr(dlProc1, line);
       }
     }
     onExited: function (exitCode) {
@@ -1353,7 +1364,7 @@ Item {
     }
     stderr: SplitParser {
       onRead: function (line) {
-        dlProc2._errBuf += line + "\n";
+        root.appendErr(dlProc2, line);
       }
     }
     onExited: function (exitCode) {

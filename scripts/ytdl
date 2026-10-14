@@ -150,7 +150,7 @@ run_with_retry() {
     fi
   fi
   if [ "$RC" -ne 0 ]; then
-    cat "$ERRL"
+    /usr/bin/tail -c 4096 -- "$ERRL"
   fi
   rm -f "$ERRL"
   return $RC
